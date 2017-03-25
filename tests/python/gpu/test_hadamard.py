@@ -13,7 +13,6 @@ def test_dense_inplace_hadamard(data_temp):
 	in_dim_np[:] = 128
 
 	shape = (1, 128)
-	# data_temp = np.random.normal(size=shape)
 	
 	input_mx = mx.nd.array(data_temp.todense())
 	in_dim_mx = mx.nd.array(in_dim_np)
@@ -21,13 +20,10 @@ def test_dense_inplace_hadamard(data_temp):
 	input_shape = mx.nd.ones(input_mx.shape)
 	in_dim_mx_shape = mx.nd.ones(in_dim_mx.shape)
 	print data_temp.todense()
-	# print input_mx, input_shape, dim_mx, dim_mx_shape, in_dim_mx, in_dim_mx_shape
 
 	test = mx.sym.dense_inplace(value=value, in_dim=in_dim)
 
-	# exe_test = test.bind(default_context(), args=[input, dim_mx, in_dim_mx], args_grad=[input_shape,dim_mx_shape,in_dim_mx_shape])
 	exe_test = test.bind(default_context(), args=[input_mx, in_dim_mx], args_grad=None, grad_req="null")
-
 	exe_test.forward(is_train=False)
 	out = exe_test.outputs[0].asnumpy()
 	print out

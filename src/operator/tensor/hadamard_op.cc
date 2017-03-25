@@ -10,7 +10,7 @@ MXNET_OPERATOR_REGISTER_HADAMARD(dense_inplace)
 
 NNVM_REGISTER_OP(_backward_dense_inplace)
 .set_num_inputs(1)
-.set_num_outputs(2)
+.set_num_outputs(3)
 .set_attr<nnvm::TIsBackward>("TIsBackward", true)
 .set_attr<FResourceRequest>("FResourceRequest",
 [](const NodeAttrs& attrs) {
