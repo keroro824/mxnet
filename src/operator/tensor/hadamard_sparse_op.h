@@ -1,5 +1,5 @@
-#ifndef MXNET_OPERATOR_TENSOR_HADAMARD_OP_H_
-#define MXNET_OPERATOR_TENSOR_HADAMARD_OP_H_
+#ifndef MXNET_OPERATOR_TENSOR_HADAMARDS_OP_H_
+#define MXNET_OPERATOR_TENSOR_HADAMARDS_OP_H_
 
 #include <mxnet/operator_util.h>
 #include <vector>
@@ -24,50 +24,49 @@ using namespace std;
 
 
 template<typename xpu>
-void hadamardTransform(const nnvm::NodeAttrs& attrs,
+void hadamardsTransform(const nnvm::NodeAttrs& attrs,
                        const OpContext& ctx,
                        const std::vector<TBlob>& inputs,
                        const std::vector<OpReqType>& req,
                        const std::vector<TBlob>& outputs) {
     using namespace mshadow;
     using namespace mshadow::expr;
-    CHECK_EQ(inputs.size(), 2);
+    CHECK_EQ(inputs.size(), 3);
     CHECK_EQ(outputs.size(), 1);
     Stream<xpu> *s = ctx.get_stream<xpu>();
 
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
             Tensor<xpu, 1, DType> out = outputs[0].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> value = inputs[0].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> in_dim_p = inputs[1].FlatTo1D<xpu, DType>(s);
-            DType *in_dim = in_dim_p.dptr_;
+            Tensor<xpu, 1, DType> keys = inputs[0].FlatTo1D<xpu, DType>(s);
+            Tensor<xpu, 1, DType> values = inputs[1].FlatTo1D<xpu, DType>(s);
+            Tensor<xpu, 1, DType> indices = inputs[2].FlatTo1D<xpu, DType>(s);
 
-            int log2d = *in_dim <= 1 ? 0 : log2((double)(*in_dim - 1)) + 1;
-            DType temp;
+            unsigned int k = (unsigned int) indices.shape_[1];
+            unsigned int nnz = (unsigned int) keys.shape_[1];
 
-            for (int t = log2d; t; t--) {
+            DType *pKeys = keys.dptr_;
+            DType *pValues = values.dptr_;
 
-                int blockSize = 1 << t;
-                int numBlocks = 1 << (log2d - t);
 
-                int halfBlockSize = blockSize >> 1;
-                DType *p1 = value.dptr_;
-                DType *p2 = value.dptr_ + halfBlockSize;
-                for (int blockIndex = numBlocks; blockIndex; blockIndex--) {
-                    for (int i = halfBlockSize; i; i--) {
-                        temp = *p1 + *p2;
-                        *p2 = *p1 - *p2;
-                        *p1 = temp;
-                        p1++;
-                        p2++;
+            for (int j = nnz; j ; j--) {
+                DType *pRes = out.dptr_;
+
+                DType *pIndices = indices.dptr_;
+                for (int i = k; i; i--) {
+                    int index = (int) *pIndices;
+                    int keyvalue = (int) *pKeys;
+
+                    if (j==nnz){
+                        *pRes=0.0;
                     }
-                    p1 += halfBlockSize;
-                    p2 += halfBlockSize;
+                    *pRes += ((__builtin_popcount(index & keyvalue) & 1)*-2 +1) * (*pValues);
+                    pRes++; pIndices++;
                 }
-                ASSIGN_DISPATCH(out, req[0], F<mshadow_op::identity>(value));
-                LOG(INFO) << value[128];
+                pKeys++; pValues++;
+
             }
-    });
+     });
 }
 
 
@@ -87,14 +86,14 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
 
 
 template<int n_in, int n_out>
-inline bool HadaShape(const nnvm::NodeAttrs& attrs,
+inline bool HadasShape(const nnvm::NodeAttrs& attrs,
                          std::vector<TShape> *in_attrs,
                          std::vector<TShape> *out_attrs) {
 
     CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
     CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
 
-    const TShape &dshape = (*in_attrs)[0];
+    const TShape &dshape = (*in_attrs)[2];
     out_attrs->clear();
     out_attrs->push_back(dshape);
     return true;
@@ -102,35 +101,32 @@ inline bool HadaShape(const nnvm::NodeAttrs& attrs,
 
 
 template<int n_in, int n_out>
-inline bool HadaType(const nnvm::NodeAttrs& attrs,
+inline bool HadasType(const nnvm::NodeAttrs& attrs,
                          std::vector<int> *in_attrs,
                          std::vector<int> *out_attrs) {
     CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
     CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
 
-    int dtype = (*in_attrs)[0];
+    int dtype = (*in_attrs)[1];
     out_attrs->clear();
     out_attrs->push_back(dtype);
     return true;
 }
 
 
-#define MXNET_OPERATOR_REGISTER_HADAMARD(name)                        \
+#define MXNET_OPERATOR_REGISTER_HADAMARDS(name)                        \
   NNVM_REGISTER_OP(name)                                            \
-  .set_num_inputs(2)                                                \
+  .set_num_inputs(3)                                                \
   .set_num_outputs(1)                                               \
   .set_attr<nnvm::FListInputNames>("FListInputNames",               \
     [](const NodeAttrs& attrs) {                                    \
-      return std::vector<std::string>{"value", "in_dim"};                \
+      return std::vector<std::string>{"keys", "values", "indices"};                \
     })          \
-  .set_attr<nnvm::FInplaceOption>("FInplaceOption",     \
-   [](const NodeAttrs& attrs){                          \
-   return std::vector<std::pair<int, int> >{{0, 0}};    \
-   })                                                           \
-  .set_attr<nnvm::FInferShape>("FInferShape", HadaShape<2, 1>)  \
-  .set_attr<nnvm::FInferType>("FInferType", HadaType<2, 1>)     \
-  .add_argument("value", "ndarray-or-symbol", "first input")                    \
-  .add_argument("in_dim", "ndarray-or-symbol", "second input")
+  .set_attr<nnvm::FInferShape>("FInferShape", HadasShape<3, 1>)  \
+  .set_attr<nnvm::FInferType>("FInferType", HadasType<3, 1>)     \
+  .add_argument("keys", "ndarray-or-symbol", "first input")                    \
+  .add_argument("values", "ndarray-or-symbol", "second input")        \
+  .add_argument("indices", "ndarray-or-symbol", "third input")
     }  // namespace op
 }  // namespace mxnet
-#endif  // MXNET_OPERATOR_TENSOR_HADAMARD_OP_H_
+#endif  // MXNET_OPERATOR_TENSOR_HADAMARD_SPARSE_OP_H_
