@@ -4,15 +4,21 @@ import random
 from mxnet.test_utils import *
 from scipy import sparse
 
-data = sparse.rand(1, 128, density=0.1, format='dok', dtype=None, random_state=None)
+
+#hack some parameters here and will pass in later
+dimension = 128
+data = sparse.rand(1, dimension, density=0.1, format='dok', dtype=None, random_state=None)
 print data
+
+
+# test hadamard for dense input
 def test_dense_inplace_hadamard(data_temp):
 	value = mx.symbol.Variable('value')
 	in_dim = mx.symbol.Variable('in_dim')
 	in_dim_np = np.ones((1,1))
-	in_dim_np[:] = 128
+	in_dim_np[:] = dimension
 
-	shape = (1, 128)
+	shape = (1, dimension)
 	
 	input_mx = mx.nd.array(data_temp.todense())
 	in_dim_mx = mx.nd.array(in_dim_np)
@@ -28,21 +34,20 @@ def test_dense_inplace_hadamard(data_temp):
 	out = exe_test.outputs[0].asnumpy()
 	print out
 
-
+# test hadamard for sparse input
 def test_sparse_direct_hadamard(random_mx):
 	keys = mx.symbol.Variable('keys')
 	values = mx.symbol.Variable('values')
 	indices = mx.symbol.Variable('indices')
 
 	keys_np = []
-	# random_mx = sparse.rand(1, 128, density=0.1, format='dok', dtype=None, random_state=None)
 	for key in random_mx.keys():
 		keys_np.append(key[1])
 	print keys_np
 	values_np = random_mx.values()
 
 	indices = []
-	for i in range(128):
+	for i in range(dimension):
 		indices.append(i)
 
 	print random_mx.todense()
@@ -58,7 +63,7 @@ def test_sparse_direct_hadamard(random_mx):
 	out = exe_test.outputs[0].asnumpy()
 	print out
 
-
+#bad way for checking if they are the same
 test_dense_inplace_hadamard(data)
 test_sparse_direct_hadamard(data)
 

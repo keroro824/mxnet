@@ -83,15 +83,7 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(outputs.size(), 3);
     Stream<xpu> *s = ctx.get_stream<xpu>();
-
-//    MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
-//
-//            Tensor<xpu, 2, DType> out = inputs[0].FlatTo2D<xpu, DType>(s);
-//            Tensor<xpu, 2, DType> value = outputs[0].FlatTo2D<xpu, DType>(s);
-//            Tensor<xpu, 1, DType> dim_p = outputs[1].FlatTo1D<xpu, DType>(s);
-//            Tensor<xpu, 1, DType> in_dim_p = outputs[2].FlatTo1D<xpu, DType>(s);
-//
-//    });
+    
 }
 
 
