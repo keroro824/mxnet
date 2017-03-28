@@ -4,8 +4,8 @@
 
 namespace mxnet {
 namespace op {
-MXNET_OPERATOR_REGISTER_HADAMARDS(sparse_inplace)
-.set_attr<FCompute>("FCompute<cpu>", hadamardsTransform<cpu>)
+MXNET_OPERATOR_REGISTER_HADAMARDSPARSE(sparse_inplace)
+.set_attr<FCompute>("FCompute<cpu>", hadamardTransformSparse<cpu>)
 .set_attr<nnvm::FGradient>("FGradient", ElemwiseGradUseIn{"_backward_sparse_inplace"});
 
 NNVM_REGISTER_OP(_backward_sparse_inplace)
@@ -16,6 +16,6 @@ NNVM_REGISTER_OP(_backward_sparse_inplace)
 [](const NodeAttrs& attrs) {
 return std::vector<ResourceRequest>{ResourceRequest::kTempSpace};
 })
-.set_attr<FCompute>("FCompute<cpu>", hadamardsTransform<cpu>);
+.set_attr<FCompute>("FCompute<cpu>", hadamardTransformSparse<cpu>);
 }
 }

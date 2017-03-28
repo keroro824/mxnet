@@ -24,7 +24,7 @@ using namespace std;
 
 
 template<typename xpu>
-void hadamardsTransform(const nnvm::NodeAttrs& attrs,
+void hadamardTransformSparse(const nnvm::NodeAttrs& attrs,
                        const OpContext& ctx,
                        const std::vector<TBlob>& inputs,
                        const std::vector<OpReqType>& req,
@@ -86,7 +86,7 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
 
 
 template<int n_in, int n_out>
-inline bool HadasShape(const nnvm::NodeAttrs& attrs,
+inline bool HadaShapeSparse(const nnvm::NodeAttrs& attrs,
                          std::vector<TShape> *in_attrs,
                          std::vector<TShape> *out_attrs) {
 
@@ -101,7 +101,7 @@ inline bool HadasShape(const nnvm::NodeAttrs& attrs,
 
 
 template<int n_in, int n_out>
-inline bool HadasType(const nnvm::NodeAttrs& attrs,
+inline bool HadaTypeSparse(const nnvm::NodeAttrs& attrs,
                          std::vector<int> *in_attrs,
                          std::vector<int> *out_attrs) {
     CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
@@ -114,7 +114,7 @@ inline bool HadasType(const nnvm::NodeAttrs& attrs,
 }
 
 
-#define MXNET_OPERATOR_REGISTER_HADAMARDS(name)                        \
+#define MXNET_OPERATOR_REGISTER_HADAMARDSPARSE(name)                        \
   NNVM_REGISTER_OP(name)                                            \
   .set_num_inputs(3)                                                \
   .set_num_outputs(1)                                               \
@@ -122,8 +122,8 @@ inline bool HadasType(const nnvm::NodeAttrs& attrs,
     [](const NodeAttrs& attrs) {                                    \
       return std::vector<std::string>{"keys", "values", "indices"};                \
     })          \
-  .set_attr<nnvm::FInferShape>("FInferShape", HadasShape<3, 1>)  \
-  .set_attr<nnvm::FInferType>("FInferType", HadasType<3, 1>)     \
+  .set_attr<nnvm::FInferShape>("FInferShape", HadaShapeSparse<3, 1>)  \
+  .set_attr<nnvm::FInferType>("FInferType", HadaTypeSparse<3, 1>)     \
   .add_argument("keys", "ndarray-or-symbol", "first input")                    \
   .add_argument("values", "ndarray-or-symbol", "second input")        \
   .add_argument("indices", "ndarray-or-symbol", "third input")

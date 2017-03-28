@@ -5,9 +5,9 @@
 namespace mxnet {
 namespace op {
 NNVM_REGISTER_OP(sparse_inplace)
-.set_attr<FCompute>("FCompute<gpu>", hadamardsTransform<gpu>);
+.set_attr<FCompute>("FCompute<gpu>", hadamardTransformSparse<gpu>);
 
 NNVM_REGISTER_OP(_backward_sparse_inplace)
-.set_attr<FCompute>("FCompute<gpu>", hadamardsTransform<gpu>);
+.set_attr<FCompute>("FCompute<gpu>", hadamardTransformSparse<gpu>);
 }
 }
