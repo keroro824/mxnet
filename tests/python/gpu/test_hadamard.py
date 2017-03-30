@@ -3,7 +3,21 @@ import numpy as np
 import random
 from mxnet.test_utils import *
 from scipy import sparse
+from mxnet.test_utils import check_consistency, set_default_context
+import sys
+import os
+curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
+sys.path.insert(0, os.path.join(curr_path, '../unittest'))
+from test_operator import *
+import mxnet as mx
+import numpy as np
+from mxnet.test_utils import check_consistency, set_default_context
+from numpy.testing import assert_allclose
+import time
 
+set_default_context(mx.gpu(0))
+del test_support_vector_machine_l1_svm
+del test_support_vector_machine_l2_svm
 
 # test hadamard for dense input
 def test_dense_inplace_hadamard(data_temp):
@@ -18,7 +32,7 @@ def test_dense_inplace_hadamard(data_temp):
 	indices_mx = mx.nd.array(indices)
 
 	# print data_temp.todense()
-
+	ctx_list = [{'ctx':mx.gpu(0)}]
 	test = mx.sym.dense_inplace(value=value, indices=index)
 
 	exe_test = test.bind(default_context(), args=[input_mx, indices_mx], args_grad=None, grad_req="null")
@@ -33,6 +47,7 @@ def test_sparse_direct_hadamard(random_mx):
 	keys = mx.symbol.Variable('keys')
 	values = mx.symbol.Variable('values')
 	index = mx.symbol.Variable('indices')
+	# set_default_context(mx.cpu(0))
 
 	keys_np = []
 	for key in random_mx.keys():
@@ -48,7 +63,6 @@ def test_sparse_direct_hadamard(random_mx):
 
 	test = mx.sym.sparse_inplace(keys=keys, values=values, indices=indices)
 	exe_test = test.bind(default_context(), args=[keys_mx, values_mx, indices_mx], args_grad=None, grad_req="null")
-
 	exe_test.forward(is_train=False)
 	out = exe_test.outputs[0].asnumpy()
 	print out
@@ -80,12 +94,14 @@ def naive_hadamard(random_mx):
 if __name__ == "__main__":
 	in_dimension = 128
 	out_dimension = 64
+	set_default_context(mx.gpu(0))
 	data = sparse.rand(1, in_dimension, density=0.1, format='dok', dtype=None, random_state=None)
 	indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
 	# print data
 	# print indices
-	sparse = test_sparse_direct_hadamard(data)
+	
 	dense = test_dense_inplace_hadamard(data)
+	sparse = test_sparse_direct_hadamard(data)
 	print np.allclose(np.array(sparse), np.array(dense), rtol=1.e-5, atol=1.e-8)
 	naive = naive_hadamard(data)
 	

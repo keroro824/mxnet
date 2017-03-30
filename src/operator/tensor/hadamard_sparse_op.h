@@ -47,7 +47,7 @@ void hadamardTransformSparse(const nnvm::NodeAttrs& attrs,
 
             DType *pKeys = keys.dptr_;
             DType *pValues = values.dptr_;
-
+            out = 0;
 
             for (int j = nnz; j ; j--) {
                 DType *pRes = out.dptr_;
@@ -57,9 +57,6 @@ void hadamardTransformSparse(const nnvm::NodeAttrs& attrs,
                     int index = (int) *pIndices;
                     int keyvalue = (int) *pKeys;
 
-                    if (j==nnz){
-                        *pRes=0.0;
-                    }
                     *pRes += ((__builtin_popcount(index & keyvalue) & 1)*-2 +1) * (*pValues);
                     pRes++; pIndices++;
                 }
