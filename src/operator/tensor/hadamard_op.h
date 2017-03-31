@@ -38,47 +38,54 @@ void hadamardTransform(const nnvm::NodeAttrs& attrs,
 
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
-            Tensor<xpu, 1, DType> out = outputs[0].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> value = inputs[0].FlatTo1D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> out = outputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> value = inputs[0].FlatTo2D<xpu, DType>(s);
             Tensor<xpu, 1, DType> indices = inputs[1].FlatTo1D<xpu, DType>(s);
             unsigned int in_dim = (unsigned int) value.shape_[1];
+            unsigned int n_samples = (unsigned int) value.shape_[0];
             DType *out_p = out.dptr_;
 
             int log2d = in_dim <= 1 ? 0 : log2((double)(in_dim - 1)) + 1;
             DType temp;
             unsigned int k = (unsigned int) indices.shape_[1];
 
-            for (int t = log2d; t; t--) {
+            for (int sample = 0; sample < n_samples; sample++) {
 
-                int blockSize = 1 << t;
-                int numBlocks = 1 << (log2d - t);
+//                LOG(INFO)<<sample
+                for (int t = log2d; t; t--) {
 
-                int halfBlockSize = blockSize >> 1;
-                DType *p1 = value.dptr_;
-                DType *p2 = value.dptr_ + halfBlockSize;
+                    int blockSize = 1 << t;
+                    int numBlocks = 1 << (log2d - t);
 
-                for (int blockIndex = numBlocks; blockIndex; blockIndex--) {
-                    for (int i = halfBlockSize; i; i--) {
-                        temp = *p1 + *p2;
-                        *p2 = *p1 - *p2;
-                        *p1 = temp;
-                        p1++;
-                        p2++;
+                    int halfBlockSize = blockSize >> 1;
+                    DType *p1 = value.dptr_;
+                    DType *p2 = value.dptr_ + halfBlockSize;
+
+                    for (int blockIndex = numBlocks; blockIndex; blockIndex--) {
+                        for (int i = halfBlockSize; i; i--) {
+                            temp = *p1 + *p2;
+                            *p2 = *p1 - *p2;
+                            *p1 = temp;
+                            p1++;
+                            p2++;
+                        }
+                        p1 += halfBlockSize;
+                        p2 += halfBlockSize;
                     }
-                    p1 += halfBlockSize;
-                    p2 += halfBlockSize;
                 }
+
+                DType *indices_p = indices.dptr_;
+                DType *input_p = value.dptr_;
+                for (int i = 0; i < k; i++) {
+                    int index = (int) *indices_p;
+                    *out_p = *(input_p + index);
+
+                    out_p++;
+                    indices_p++;
+                }
+                value.dptr_ += in_dim;
             }
 
-            DType *indices_p = indices.dptr_;
-            DType *input_p = value.dptr_;
-            for (int i = 0; i < k; i++) {
-                int index = (int) *indices_p;
-                *out_p = *(input_p + index);
-
-                out_p++;
-                indices_p++;
-            }
     });
 }
 
@@ -105,9 +112,10 @@ inline bool HadaShape(const nnvm::NodeAttrs& attrs,
     CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
     CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
 
-    const TShape &dshape = (*in_attrs)[1];
+    const TShape &rshape = (*in_attrs)[0];
+    const TShape &cshape = (*in_attrs)[1];
     out_attrs->clear();
-    out_attrs->push_back(dshape);
+    out_attrs->push_back(Shape2(rshape[0], cshape[1]));
     return true;
 }
 

@@ -16,8 +16,6 @@ namespace mshadow {
 namespace cuda {
 
 
-
-
 __device__ void atomic_add(float* dst, float val) {
 	atomicAdd(dst, val);
 }
@@ -46,12 +44,6 @@ __device__ void atomic_add(double* address, double val) {
 template <typename DType>
 __global__ void hadamard_forward_kernel(const int nthreads, DType *out, DType *indices_p, DType *in, int n_smaples, int in_dim, int out_dim) {
 
-
-	// get the target location in the output
-     //   const int target = i_sample*out_dim + h[i_indim];
-      //  atomic_add(out + target, s[i_indim] * in[index]);
-
-
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (index >= nthreads){
@@ -62,7 +54,7 @@ __global__ void hadamard_forward_kernel(const int nthreads, DType *out, DType *i
     DType temp;
     unsigned int k = out_dim;
 
-
+    in += index*in_dim;
     for (int t = log2d; t; t--) {
 
         int blockSize = 1 << t;
@@ -87,9 +79,10 @@ __global__ void hadamard_forward_kernel(const int nthreads, DType *out, DType *i
 
 
     DType *input_p = in;
+    out += index*out_dim;
     for (int i = 0; i < k; i++) {
-        int index = (int) *indices_p;
-        *out = *(input_p + index);
+        int ind = (int) *indices_p;
+        *out = *(input_p + ind);
 
         out++;
         indices_p++;
@@ -107,7 +100,7 @@ inline void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType>
     DType *out_p = out.dptr_;
     DType *in_p = value.dptr_;
     DType *indices_p = indices.dptr_;
-    int processing_batch_size = 32;
+    int processing_batch_size = 1024;
 
     int upper_bound = n_samples/processing_batch_size;
     if (n_samples%processing_batch_size == 0){
@@ -118,17 +111,16 @@ inline void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType>
     int bstart = 0;
     for ( int i = 0; i <= upper_bound; i++ ){
         int batchlen = min(processing_batch_size, n_samples - bstart );
-        int nthreads = batchlen * in_dim;
+        int nthreads = batchlen;
         int threads_per_block = min(THREADS_PER_BLOCK, nthreads);
         int nblocks = (nthreads + threads_per_block - 1) / threads_per_block ;
-        printf("n_samples %d  upper_bound %d, nthreads %d, nblocks %d", n_samples, upper_bound, nthreads, nblocks);
+        //printf("n_samples %d  upper_bound %d, nthreads %d, nblocks %d", n_samples, upper_bound, nthreads, nblocks);
         hadamard_forward_kernel<DType><<<nblocks, threads_per_block>>>(nthreads, out_p+bstart*out_dim, indices_p, in_p+bstart*in_dim, batchlen, in_dim, out_dim);
         bstart = (i+1)*batchlen;
 
-
     }
-
 }
+
 }
 }
 

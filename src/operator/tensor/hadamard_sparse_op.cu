@@ -34,14 +34,16 @@ __global__ void hadamard_sparse_forward_kernel(const int nthreads, DType *out, D
     }
 
     int k = out_dim;
-    int nnz = in_dim;
+    //int nnz = in_dim;
 
     DType *pKeys = key;
     DType *pValues = value;
     out = 0;
 
-    for (int j = nnz; j ; j--) {
+   // for (int j = nnz; j ; j--) {
         DType *pRes = out;
+        pKeys += index;
+        pValues += index;
 
         for (int i = k; i; i--) {
             int index = (int) *indices_p;
@@ -50,15 +52,15 @@ __global__ void hadamard_sparse_forward_kernel(const int nthreads, DType *out, D
             *pRes += ((__popcll(index & keyvalue) & 1)*-2 +1) * (*pValues);
             pRes++; indices_p++;
         }
-        pKeys++; pValues++;
+    //    pKeys++; pValues++;
+    //}
 
-    }
 
 }
 
 
 template <typename DType>
-inline void hadamardTransformGSparse(Tensor<gpu, 1, DType> &out, Tensor<gpu, 1, DType> &value, Tensor<gpu, 1, DType> &key, Tensor<gpu, 1, DType> &indices) {
+inline void hadamardTransformGSparse(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value, Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, DType> &indices) {
 
     int in_dim = (unsigned int) key.shape_[1];
     int n_samples = (unsigned int) key.shape_[0];
@@ -68,7 +70,7 @@ inline void hadamardTransformGSparse(Tensor<gpu, 1, DType> &out, Tensor<gpu, 1, 
     DType *key_p = key.dptr_;
 
     DType *indices_p = indices.dptr_;
-    int processing_batch_size = 32;
+    int processing_batch_size = 128;
 
     int upper_bound = n_samples/processing_batch_size;
     if (n_samples%processing_batch_size == 0){
@@ -79,10 +81,12 @@ inline void hadamardTransformGSparse(Tensor<gpu, 1, DType> &out, Tensor<gpu, 1, 
     int bstart = 0;
     for ( int i = 0; i <= upper_bound; i++ ){
         int batchlen = min(processing_batch_size, n_samples - bstart );
-        int nthreads = batchlen * in_dim;
+        int nthreads = batchlen*in_dim;
         int threads_per_block = min(THREADS_PER_BLOCK, nthreads);
         int nblocks = (nthreads + threads_per_block - 1) / threads_per_block ;
-        printf("n_samples %d  upper_bound %d, nthreads %d, nblocks %d", n_samples, upper_bound, nthreads, nblocks);
+        //printf("n_samples %d  upper_bound %d, nthreads %d, nblocks %d", n_samples, upper_bound, nthreads, nblocks);
+
+
         hadamard_sparse_forward_kernel<DType><<<nblocks, threads_per_block>>>(nthreads, out_p+bstart*out_dim, indices_p, value_p+bstart*in_dim, key_p+bstart*in_dim, batchlen, in_dim, out_dim);
         bstart = (i+1)*batchlen;
 
@@ -112,9 +116,9 @@ void hadamardTransformGeneralSparse(const nnvm::NodeAttrs& attrs,
 
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
-            Tensor<xpu, 1, DType> out = outputs[0].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> key = inputs[0].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> value = inputs[1].FlatTo1D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> out = outputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> key = inputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> value = inputs[1].FlatTo2D<xpu, DType>(s);
             Tensor<xpu, 1, DType> indices = inputs[2].FlatTo1D<xpu, DType>(s);
 
             mshadow::cuda::hadamardTransformGSparse<DType>(out, value, key,  indices);

@@ -37,8 +37,8 @@ void hadamardTransformSparse(const nnvm::NodeAttrs& attrs,
 
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
-            Tensor<xpu, 1, DType> out = outputs[0].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> keys = inputs[0].FlatTo1D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> out = outputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor<xpu, 2, DType> keys = inputs[0].FlatTo2D<xpu, DType>(s);
             Tensor<xpu, 1, DType> values = inputs[1].FlatTo1D<xpu, DType>(s);
             Tensor<xpu, 1, DType> indices = inputs[2].FlatTo1D<xpu, DType>(s);
 
@@ -90,9 +90,10 @@ inline bool HadaShapeSparse(const nnvm::NodeAttrs& attrs,
     CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
     CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
 
-    const TShape &dshape = (*in_attrs)[2];
+    const TShape &rshape = (*in_attrs)[0];
+    const TShape &cshape = (*in_attrs)[2];
     out_attrs->clear();
-    out_attrs->push_back(dshape);
+    out_attrs->push_back(Shape2(rshape[0], cshape[1]));
     return true;
 }
 
