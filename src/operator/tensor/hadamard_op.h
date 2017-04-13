@@ -51,7 +51,7 @@ void hadamardTransform(const nnvm::NodeAttrs& attrs,
 
             for (int sample = 0; sample < n_samples; sample++) {
 
-//                LOG(INFO)<<sample
+
                 for (int t = log2d; t; t--) {
 
                     int blockSize = 1 << t;
@@ -79,6 +79,7 @@ void hadamardTransform(const nnvm::NodeAttrs& attrs,
                 for (int i = 0; i < k; i++) {
                     int index = (int) *indices_p;
                     *out_p = *(input_p + index);
+                    //*out_p = *(input_p+i);
 
                     out_p++;
                     indices_p++;

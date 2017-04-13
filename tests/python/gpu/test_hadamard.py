@@ -20,7 +20,7 @@ del test_support_vector_machine_l1_svm
 del test_support_vector_machine_l2_svm
 
 # test hadamard for dense input
-def test_dense_inplace_hadamard(data_temp):
+def test_dense_inplace_hadamard(data_temp, indices):
 	value = mx.symbol.Variable('value')
 	index = mx.symbol.Variable('indices')
 	
@@ -39,10 +39,10 @@ def test_dense_inplace_hadamard(data_temp):
 
 
 	end = time.time()
-	print(end - start)
+	#print(end - start)
 	
-	print out
-	return out
+	#print out
+	return (end - start), out
 
 
 # test hadamard for sparse input
@@ -55,7 +55,7 @@ def test_sparse_direct_hadamard(random_mx):
 	keys_np = []
 	for key in random_mx.keys():
 		keys_np.append(key[1])
-	print keys_np
+
 	values_np = random_mx.values()
 
 	# print random_mx.todense()
@@ -73,9 +73,8 @@ def test_sparse_direct_hadamard(random_mx):
 	out = exe_test.outputs[0].asnumpy()
 
 	end = time.time()
-	print(end - start)
-	print out
-	return out
+	#print out
+	return (end - start), out
 
 
 def popcount32_table16(v):
@@ -101,25 +100,31 @@ def naive_hadamard(random_mx):
 		for elem in indices[0]:
 			out.append(result[elem])
 		final_out.append(out)
-	print final_out
+	# print final_out
 	return final_out	 
 
 
 #bad way for checking if they are the same
 if __name__ == "__main__":
-	in_dimension = 1024
-	out_dimension = 100
-	# set_default_context(mx.cpu())
-	data = sparse.rand(100000, in_dimension, density=0.1, format='dok', dtype=None, random_state=None)
-	indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
-	# print data
-	# print indices
-	dense = test_dense_inplace_hadamard(data)
-	set_default_context(mx.gpu(0))
-	sparse = test_dense_inplace_hadamard(data)
-	# # sparse = test_sparse_direct_hadamard(data)
-	print np.allclose(np.array(sparse), np.array(dense), rtol=1.e-5, atol=1.e-8)
+	for i in range(10,20):
+		in_dimension =2**i
+		out_dimension = 2**(i-2)
+		# set_default_context(mx.cpu())
+		data = sparse.rand(10000, in_dimension, density=0.1, format='dok', dtype=None, random_state=None)
+		indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
+		#indices = np.array([range(in_dimension)])
+
+		# print data
+		# print indices
+		#sparse = test_sparse_direct_hadamard(data)
+		set_default_context(mx.cpu())
+		timed, densem = test_dense_inplace_hadamard(data, indices)
+		set_default_context(mx.gpu())
+		times, sparsem = test_dense_inplace_hadamard(data, indices)
+		
+		print in_dimension, out_dimension, timed, times, np.allclose(np.array(sparsem), np.array(densem), rtol=1.e-5, atol=1.e-8)
 	# naive = naive_hadamard(data)
 	
 	# print np.allclose(np.array(dense), np.array(naive))
-	
+
+
