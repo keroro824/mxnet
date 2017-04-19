@@ -106,7 +106,7 @@ def naive_hadamard(random_mx):
 
 #bad way for checking if they are the same
 if __name__ == "__main__":
-	for i in range(10,20):
+	for i in range(8,16):
 		in_dimension =2**i
 		out_dimension = 2**(i-2)
 		# set_default_context(mx.cpu())

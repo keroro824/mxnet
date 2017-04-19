@@ -2,23 +2,11 @@
 #include "./elemwise_binary_op.h"
 #include "./elemwise_binary_broadcast_op.h"
 #include <mshadow/tensor.h>
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define WARPS_PER_BLOCK 1
-#define THREADS_PER_BLOCK 512
-
-#define CUDA_KERNEL_LOOP(i, n) \
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; \
-       i < (n); \
-       i += blockDim.x * gridDim.x)
-
-
-
+#include <cuda_device_runtime_api.h>
+#include <cuda.h>
 
 #ifndef FWT_KERNEL_CUH
 #define FWT_KERNEL_CUH
@@ -28,36 +16,8 @@
 
 
 
-
-
-
 namespace mshadow {
 namespace cuda {
-
-
-__device__ void atomic_add(float* dst, float val) {
-	atomicAdd(dst, val);
-}
-
-// for double precision
-__device__ void atomic_add(double* address, double val) {
-  // code example in the official document at:
-  // http://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html
-  //      #atomic-functions
-
-  // NOLINT_NEXT_LINE(runtime/int)
-  unsigned long long int* address_as_ull = (unsigned long long int*) address;
-  // NOLINT_NEXT_LINE(runtime/int)
-  unsigned long long int old = *address_as_ull, assumed;
-  do {
-    assumed = old;
-    old = atomicCAS(address_as_ull, assumed,
-            __double_as_longlong(val + __longlong_as_double(assumed)));
-    // Note: uses integer comparison to avoid hang in case of NaN
-    // (since NaN != NaN)
-  } while (assumed != old);
-}
-
 
 
 template <typename DType>
@@ -115,6 +75,9 @@ template <typename DType>
 __global__ void fwtBatch1Kernel(DType *d_Output, DType *d_Input, int log2N){
     const int    N = 1 << log2N;
     const int base = blockIdx.x << log2N;
+    int hi = blockIdx.x * blockDim.x + threadIdx.x;
+    //std::printf("blockIdx: %d, blockDim: %d", blockIdx.x, blockDim.x);
+    //std::printf("threadIdx: %d", threadIdx.x);
 
     //(2 ** 11) * 4 bytes == 8KB -- maximum s_data[] size for G80
     extern __shared__ float s_data[];
@@ -166,8 +129,8 @@ __global__ void fwtBatch1Kernel(DType *d_Output, DType *d_Input, int log2N){
         d_Dst[pos] = s_data[pos];
 }
 
-template <typename DType>
 
+template <typename DType>
 __global__ void fwtBatch2Kernel(
     DType *d_Output,
     DType *d_Input,
@@ -206,29 +169,28 @@ __global__ void fwtBatch2Kernel(
     d_Dst[i3] = T - D3;
 }
 
+
 template <typename DType>
-
-__global__ void fwtBatchGPU(DType *d_Data, DType *out_p, int log2N){
-    const int THREAD_N = 256;
-    int N = 1 << log2N;
-    int M=1;
-    dim3 grid((1 << log2N) / (4 * THREAD_N), M, 1);
-    const int pos = blockIdx.x * blockDim.x + threadIdx.x;
-    d_Data+=N*pos;
-    out_p+=N*pos;
-    __syncthreads();
-    for(; log2N > ELEMENTARY_LOG2SIZE; log2N -= 2, N >>= 2, M <<= 2){
-        fwtBatch2Kernel<DType><<<grid, THREAD_N>>>(d_Data, d_Data, N / 4);
-
+__global__ void rsKernel(
+    DType *d_Output,
+    DType *d_Input,
+    DType *indices_p,
+    int in_dim,
+    int out_dim)
+{
+    const int real = blockIdx.x * blockDim.x + threadIdx.x;
+    const int pos = real%out_dim;
+    const int sample_n =  real/out_dim;
+    //std::printf("thread: %d \n", real);
+    if (pos>=out_dim){
+        return;
     }
-    __syncthreads();
-    fwtBatch1Kernel<DType><<<M, N / 4, N * sizeof(DType)>>>(
-        out_p,
-        d_Data,
-        log2N
-    );
-    __syncthreads();
+    int index = (int)*(indices_p + pos);
+    DType *d_Dst = d_Output + (sample_n*out_dim+pos);
+    DType *d_Src = d_Input + (sample_n*in_dim+index);
+    *d_Dst = *d_Src;
 }
+
 
 template <typename DType>
 void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value,Tensor<gpu, 1, DType> &indices) {
@@ -237,27 +199,27 @@ void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value
     int n_samples = (unsigned int) value.shape_[0];
     int out_dim = (unsigned int) indices.shape_[1];
     DType *out_p = out.dptr_;
-    DType *d_Data = value.dptr_;
     DType *indices_p = indices.dptr_;
-    const int THREAD_N = 256;
+    DType *d_Data = value.dptr_;
+
     int log2N = in_dim <= 1 ? 0 : log2((double)(in_dim - 1)) + 1;
+    int M = n_samples;
+    const int THREAD_N = 256;
+    int N = 1 << log2N;
 
-    fwtBatchGPU<DType><<< n_samples, 1>>>(d_Data, out_p, log2N);
-
-    LOG(INFO)<<"sddISDFS RIHT";
+    dim3 grid((1 << log2N) / (4 * THREAD_N), M, 1);
 
 
+    for(; log2N > ELEMENTARY_LOG2SIZE; log2N -= 2, N >>= 2, M <<= 2){
+        fwtBatch2Kernel<DType><<<grid, THREAD_N>>>(d_Data, d_Data, N / 4);
+    }
+    fwtBatch1Kernel<DType><<<M, N / 4, N * sizeof(DType)>>>(d_Data, d_Data, log2N);
 
-    //for (int i = 0; i < out_dim; i++) {
-        //int index = (int) *indices_p;
-         //LOG(INFO)<<"hi"<<out_p;
-        //printf("what value %d", index);
+    int cal = out_dim%THREAD_N == 0 ? 0:1;
 
-        //*out_p = *(input_p);
-
-    //    out_p++;
-    //    indices_p++;
-    //}
+    const int threads_per_block = min(THREAD_N, out_dim);// to make number of threads the same as input
+    int nblocks = n_samples*((out_dim + threads_per_block - 1) / threads_per_block) ;
+    rsKernel<DType><<<nblocks, threads_per_block>>>(out_p, d_Data, indices_p, in_dim, out_dim);
 
 }
 
@@ -268,7 +230,6 @@ void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value
 
 namespace mxnet {
 namespace op {
-
 
 template<typename xpu>
 void hadamardTransformGeneral(const nnvm::NodeAttrs& attrs,
