@@ -19,112 +19,117 @@
 
 namespace mxnet {
 namespace op {
-using namespace mshadow;
-using namespace std;
-
-
-template<typename xpu>
-void hadamardTransformSparse(const nnvm::NodeAttrs& attrs,
-                       const OpContext& ctx,
-                       const std::vector<TBlob>& inputs,
-                       const std::vector<OpReqType>& req,
-                       const std::vector<TBlob>& outputs) {
     using namespace mshadow;
-    using namespace mshadow::expr;
-    CHECK_EQ(inputs.size(), 3);
-    CHECK_EQ(outputs.size(), 1);
-    Stream<xpu> *s = ctx.get_stream<xpu>();
+    using namespace std;
 
-    MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
-            Tensor<xpu, 2, DType> out = outputs[0].FlatTo2D<xpu, DType>(s);
-            Tensor<xpu, 2, DType> keys = inputs[0].FlatTo2D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> values = inputs[1].FlatTo1D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> indices = inputs[2].FlatTo1D<xpu, DType>(s);
+    struct InputParam : public dmlc::Parameter<InputParam> {
+        int n_samples;
+        DMLC_DECLARE_PARAMETER(InputParam) {
+                DMLC_DECLARE_FIELD(n_samples)
+                        .describe("");
+        }
+    };
 
-            unsigned int k = (unsigned int) indices.shape_[1];
-            unsigned int nnz = (unsigned int) keys.shape_[1];
 
-            DType *pKeys = keys.dptr_;
-            DType *pValues = values.dptr_;
-            out = 0;
+    template<typename xpu>
+    void hadamardTransformSparse(const nnvm::NodeAttrs &attrs,
+                                 const OpContext &ctx,
+                                 const std::vector <TBlob> &inputs,
+                                 const std::vector <OpReqType> &req,
+                                 const std::vector <TBlob> &outputs) {
+        using namespace mshadow;
+        using namespace mshadow::expr;
+        CHECK_EQ(inputs.size(), 3);
+        CHECK_EQ(outputs.size(), 1);
+        Stream <xpu> *s = ctx.get_stream<xpu>();
 
-            for (int j = nnz; j ; j--) {
-                DType *pRes = out.dptr_;
+        MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
-                DType *pIndices = indices.dptr_;
-                for (int i = k; i; i--) {
-                    int index = (int) *pIndices;
-                    int keyvalue = (int) *pKeys;
+                Tensor < xpu, 2, DType > out = outputs[0].FlatTo2D<xpu, DType>(s);
+                Tensor<xpu, 2, DType> keys = inputs[0].FlatTo2D<xpu, DType>(s);
+                Tensor<xpu, 1, DType> values = inputs[1].FlatTo1D<xpu, DType>(s);
+                Tensor<xpu, 1, DType> indices = inputs[2].FlatTo1D<xpu, DType>(s);
 
-                    *pRes += ((__builtin_popcount(index & keyvalue) & 1)*-2 +1) * (*pValues);
-                    pRes++; pIndices++;
+                unsigned int k = (unsigned int) indices.shape_[1];
+                unsigned int nnz = (unsigned int) keys.shape_[0];
+                //LOG(INFO)<<nnz;
+                DType *pKeys = keys.dptr_;
+                DType *pValues = values.dptr_;
+                out = 0;
+
+                for (int j = nnz; j; j--) {
+
+                    //LOG(INFO)<<*pKeys;
+                    DType *rest = out.dptr_;
+                    DType *pIndices = indices.dptr_;
+
+                    for (int i = k; i; i--) {
+                        int index = (int) *pIndices;
+                        int row = (int) *pKeys;
+                        int keyvalue = (int) *(pKeys+1);
+                        DType *pRes = rest;
+                        pRes += (row+1) * k - i;
+
+                        *pRes += ((__builtin_popcount(index & keyvalue) & 1) * -2 + 1) * (*pValues);
+                        //pRes++;
+                        pIndices++;
+                    }
+                    pKeys+=2;
+                    pValues++;
+
                 }
-                pKeys++; pValues++;
+        });
+    }
 
-            }
-     });
+
+    template<typename xpu>
+    void hadamardTransform_backwards(const nnvm::NodeAttrs &attrs,
+                                     const OpContext &ctx,
+                                     const std::vector <TBlob> &inputs,
+                                     const std::vector <OpReqType> &req,
+                                     const std::vector <TBlob> &outputs) {
+        using namespace mshadow;
+        using namespace mshadow::expr;
+        CHECK_EQ(inputs.size(), 1);
+        CHECK_EQ(outputs.size(), 1);
+        Stream <xpu> *s = ctx.get_stream<xpu>();
+
+    }
+
+
+    template<int n_in, int n_out>
+    inline bool HadaShapeSparse(const nnvm::NodeAttrs &attrs,
+                                std::vector <TShape> *in_attrs,
+                                std::vector <TShape> *out_attrs) {
+
+        CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
+        CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
+
+        const InputParam &param = nnvm::get<InputParam>(attrs.parsed);
+        int dim = param.n_samples;
+
+        const TShape &rshape = (*in_attrs)[0];
+        const TShape &cshape = (*in_attrs)[2];
+        out_attrs->clear();
+        out_attrs->push_back(Shape2(dim, cshape[1]));
+        return true;
+    }
+
+
+    template<int n_in, int n_out>
+    inline bool HadaTypeSparse(const nnvm::NodeAttrs &attrs,
+                               std::vector<int> *in_attrs,
+                               std::vector<int> *out_attrs) {
+        CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
+        CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
+
+        int dtype = (*in_attrs)[1];
+        out_attrs->clear();
+        out_attrs->push_back(dtype);
+        return true;
+    }
 }
 
-
-template<typename xpu>
-void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
-                       const OpContext& ctx,
-                       const std::vector<TBlob>& inputs,
-                       const std::vector<OpReqType>& req,
-                       const std::vector<TBlob>& outputs) {
-    using namespace mshadow;
-    using namespace mshadow::expr;
-    CHECK_EQ(inputs.size(), 1);
-    CHECK_EQ(outputs.size(), 1);
-    Stream<xpu> *s = ctx.get_stream<xpu>();
-
-}
-
-
-template<int n_in, int n_out>
-inline bool HadaShapeSparse(const nnvm::NodeAttrs& attrs,
-                         std::vector<TShape> *in_attrs,
-                         std::vector<TShape> *out_attrs) {
-
-    CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
-    CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
-
-    const TShape &rshape = (*in_attrs)[0];
-    const TShape &cshape = (*in_attrs)[2];
-    out_attrs->clear();
-    out_attrs->push_back(Shape2(rshape[0], cshape[1]));
-    return true;
-}
-
-
-template<int n_in, int n_out>
-inline bool HadaTypeSparse(const nnvm::NodeAttrs& attrs,
-                         std::vector<int> *in_attrs,
-                         std::vector<int> *out_attrs) {
-    CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
-    CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
-
-    int dtype = (*in_attrs)[1];
-    out_attrs->clear();
-    out_attrs->push_back(dtype);
-    return true;
-}
-
-
-#define MXNET_OPERATOR_REGISTER_HADAMARDSPARSE(name)                        \
-  NNVM_REGISTER_OP(name)                                            \
-  .set_num_inputs(3)                                                \
-  .set_num_outputs(1)                                               \
-  .set_attr<nnvm::FListInputNames>("FListInputNames",               \
-    [](const NodeAttrs& attrs) {                                    \
-      return std::vector<std::string>{"keys", "values", "indices"};                \
-    })          \
-  .set_attr<nnvm::FInferShape>("FInferShape", HadaShapeSparse<3, 1>)  \
-  .set_attr<nnvm::FInferType>("FInferType", HadaTypeSparse<3, 1>)     \
-  .add_argument("keys", "ndarray-or-symbol", "first input")                    \
-  .add_argument("values", "ndarray-or-symbol", "second input")        \
-  .add_argument("indices", "ndarray-or-symbol", "third input")
-    }  // namespace op
 }  // namespace mxnet
 #endif  // MXNET_OPERATOR_TENSOR_HADAMARD_SPARSE_OP_H_
