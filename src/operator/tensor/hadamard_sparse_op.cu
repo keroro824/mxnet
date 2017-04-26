@@ -113,7 +113,6 @@ void hadamardTransformGeneralSparse(const nnvm::NodeAttrs& attrs,
 
             mshadow::cuda::hadamardTransformGSparse<DType>(out, value, key,  indices);
 
-
     });
 }
 

@@ -98,10 +98,18 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
                                  const std::vector<OpReqType>& req,
                                  const std::vector<TBlob>& outputs) {
     using namespace mshadow;
-    using namespace mshadow::expr;
-    CHECK_EQ(inputs.size(), 1);
+
+    CHECK_EQ(inputs.size(), 3);
     CHECK_EQ(outputs.size(), 2);
     Stream<xpu> *s = ctx.get_stream<xpu>();
+    MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
+
+
+            Tensor < xpu, 2, DType > indices = inputs[0].FlatTo2D<xpu, DType>(s);
+
+            LOG(INFO)<<*(indices.dptr_);
+
+    });
 }
 
 

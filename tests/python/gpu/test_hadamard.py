@@ -32,48 +32,56 @@ def test_dense_inplace_hadamard(data_temp, indices):
 	start = time.time()
 
 	test = mx.sym.dense_inplace(value=value, indices=index)
+	arr_grad = [mx.nd.empty(input_mx.shape), mx.nd.empty(indices.shape)]
 
-	exe_test = test.bind(default_context(), args=[input_mx, indices_mx], args_grad=None, grad_req="null")
+	exe_test = test.bind(default_context(), args=[input_mx, indices_mx], args_grad=arr_grad)
 	exe_test.forward(is_train=False)
 	out = exe_test.outputs[0].asnumpy()
 
+	exe_test.backward([mx.nd.array(out)])
+	back_out = arr_grad[0].asnumpy()
 
 	end = time.time()
 	#print(end - start)
-	
-	#print out
+	print back_out
+	# print out
 	return (end - start), out
 
 
 # test hadamard for sparse input
-def test_sparse_direct_hadamard(random_mx):
+def test_sparse_direct_hadamard(random_mx, indices, input_dim):
 	keys = mx.symbol.Variable('keys')
 	values = mx.symbol.Variable('values')
 	index = mx.symbol.Variable('indices')
 	# set_default_context(mx.cpu(0))
+	# keys_np = []
+	# for key in random_mx.keys():
+	# 	keys_np.append(key[1])
 
-	keys_np = []
-	for key in random_mx.keys():
-		keys_np.append(key[1])
-
-	values_np = random_mx.values()
-
-	# print random_mx.todense()
+	keys_np = random_mx.keys()
+	# ind = np.argsort(keys_np, axis=1)
+	values_np = np.array(random_mx.values())
+	# keys_np = np.array(keys_np)[ind]
+	# values_np = values_np[ind]
+	
+	
+	#print keys_np
+	#print random_mx.todense()
 
 	keys_mx = mx.nd.array([keys_np])
+
 	values_mx = mx.nd.array([values_np])
 	indices_mx = mx.nd.array(indices)
 
-	print keys_mx
 	start = time.time()
 
-	test = mx.sym.sparse_inplace(keys=keys, values=values, indices=indices)
+	test = mx.sym.sparse_inplace(keys=keys, values=values, indices=index, n_samples=input_dim )
 	exe_test = test.bind(default_context(), args=[keys_mx, values_mx, indices_mx], args_grad=None, grad_req="null")
 	exe_test.forward(is_train=False)
 	out = exe_test.outputs[0].asnumpy()
 
 	end = time.time()
-	#print out
+	print out
 	return (end - start), out
 
 
@@ -106,23 +114,25 @@ def naive_hadamard(random_mx):
 
 #bad way for checking if they are the same
 if __name__ == "__main__":
-	for i in range(8,16):
+	for i in range(8,9):
 		in_dimension =2**i
-		out_dimension = 2**(i-2)
+		out_dimension = 2**(i-5)
+		n_samples = 1
 		# set_default_context(mx.cpu())
-		data = sparse.rand(10000, in_dimension, density=0.1, format='dok', dtype=None, random_state=None)
+		data = sparse.rand(n_samples, in_dimension, density=0.1, format='dok', dtype=None, random_state=None)
 		indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
 		#indices = np.array([range(in_dimension)])
 
-		# print data
+		print data
 		# print indices
 		#sparse = test_sparse_direct_hadamard(data)
 		set_default_context(mx.cpu())
 		timed, densem = test_dense_inplace_hadamard(data, indices)
-		set_default_context(mx.gpu())
-		times, sparsem = test_dense_inplace_hadamard(data, indices)
+		# set_default_context(mx.gpu())
+		# times, sparsem = test_dense_inplace_hadamard(data, indices)
+
 		
-		print in_dimension, out_dimension, timed, times, np.allclose(np.array(sparsem), np.array(densem), rtol=1.e-5, atol=1.e-8)
+		# print in_dimension, out_dimension, timed, times, np.allclose(np.array(sparsem), np.array(densem), rtol=1.e-5, atol=1.e-4)
 	# naive = naive_hadamard(data)
 	
 	# print np.allclose(np.array(dense), np.array(naive))
