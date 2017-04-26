@@ -40,7 +40,7 @@ bool ElementWiseSumShape(const nnvm::NodeAttrs& attrs,
                          std::vector<TShape> *in_attrs,
                          std::vector<TShape> *out_attrs) {
   CHECK_EQ(out_attrs->size(), 1);
-  return ElemwiseAttr<TShape, shape_is_none, shape_assign, true>(
+  return ElemwiseAttr<TShape, shape_is_none, shape_assign, true, shape_string>(
     attrs, in_attrs, out_attrs, TShape());
 }
 
@@ -48,7 +48,7 @@ bool ElementWiseSumType(const nnvm::NodeAttrs& attrs,
                         std::vector<int> *in_attrs,
                         std::vector<int> *out_attrs) {
   CHECK_EQ(out_attrs->size(), 1);
-  return ElemwiseAttr<int, type_is_none, type_assign, true>(
+  return ElemwiseAttr<int, type_is_none, type_assign, true, type_string>(
     attrs, in_attrs, out_attrs, -1);
 }
 
@@ -84,7 +84,7 @@ NNVM_REGISTER_OP(add_n)
 .set_attr<nnvm::FInferShape>("FInferShape", ElementWiseSumShape)
 .set_attr<nnvm::FInferType>("FInferType", ElementWiseSumType)
 .set_attr<nnvm::FGradient>("FGradient", ElementWiseSumGrad)
-.add_argument("args", "ndarray-or-symbol[]", "Positional input arguments");
+.add_argument("args", "NDArray-or-Symbol[]", "Positional input arguments");
 
 
 

@@ -22,9 +22,14 @@ struct ReduceAxesParam : public dmlc::Parameter<ReduceAxesParam> {
   bool keepdims;
   DMLC_DECLARE_PARAMETER(ReduceAxesParam) {
     DMLC_DECLARE_FIELD(axis).set_default(TShape())
-        .describe("The axes to perform the reduction.");
+      .describe("The axis or axes along which to perform the reduction. "
+                "The default, `axis=()`, will compute over all elements into a "
+                "scalar array with shape `(1,)`.\n\nIf axis is int, "
+                "a reduction is performed on a particular axis.\n\n"
+                "If axis is a tuple of ints, a reduction is performed "
+                "on all the axes specified in the tuple.");
     DMLC_DECLARE_FIELD(keepdims).set_default(false)
-      .describe("If true, the axes which are reduced are left "
+      .describe("If this is set to `True`, the reduced axes are left "
                 "in the result as dimension with size one.");
   }
 };
@@ -34,11 +39,28 @@ struct ReduceAxisParam : public dmlc::Parameter<ReduceAxisParam> {
   bool keepdims;
   DMLC_DECLARE_PARAMETER(ReduceAxisParam) {
     DMLC_DECLARE_FIELD(axis).set_default(dmlc::optional<int>())
-      .describe("int or None. The axis to perform the reduction. "
+      .describe("The axis along which to perform the reduction. "
                 "Negative values means indexing from right to left. "
-                "If is `None`, a global reduction will be performed.");
+                "``Requires axis to be set as int, because global reduction "
+                "is not supported yet.``");
     DMLC_DECLARE_FIELD(keepdims).set_default(false)
-      .describe("If true, the axis which is reduced is left "
+      .describe("If this is set to `True`, the reduced axis is left "
+                "in the result as dimension with size one.");
+  }
+};
+
+struct PickParam : public dmlc::Parameter<PickParam> {
+  dmlc::optional<int> axis;
+  int mode;
+  bool keepdims;
+  DMLC_DECLARE_PARAMETER(PickParam) {
+    DMLC_DECLARE_FIELD(axis).set_default(dmlc::optional<int>(-1))
+      .describe("int or None. The axis to picking the elements. "
+                "Negative values means indexing from right to left. "
+                "If is `None`, the elements in the index w.r.t the "
+                "flattened input will be picked.");
+    DMLC_DECLARE_FIELD(keepdims).set_default(false)
+      .describe("If true, the axis where we pick the elements is left "
                 "in the result as dimension with size one.");
   }
 };
@@ -67,7 +89,7 @@ struct BroadcastToParam : public dmlc::Parameter<BroadcastToParam> {
 
 inline int CheckAxis(int axis, int ndim) {
   CHECK(axis < ndim && axis >= -ndim)
-    << "axis " << axis << " exceeds input dimension of " << ndim;
+    << "axis " << axis << " exceeds the input dimension of " << ndim;
   return (axis + ndim)%ndim;
 }
 
@@ -458,9 +480,9 @@ struct ReduceGrad {
   const char *op_name;
   std::vector<nnvm::NodeEntry> operator()(const nnvm::NodePtr& n,
                                           const std::vector<nnvm::NodeEntry>& ograds) {
-    return MakeGradNode(
+    return MakeNonlossGradNode(
         op_name, n,
-        {ograds[0], n->inputs[0], nnvm::NodeEntry{n, 0, 0}},
+        ograds, {n->inputs[0], nnvm::NodeEntry{n, 0, 0}},
         n->attrs.dict);
   }
 };
@@ -484,13 +506,13 @@ void L2NormCompute(const nnvm::NodeAttrs& attrs,
 /*! \brief index element from array along axes */
 template<int ndim>
 struct pick {
-  template<typename DType>
+  template<typename DType, typename IType>
   MSHADOW_XINLINE static void Map(int i, DType* out, const DType* a,
-                                  const int *idx, int M, int stride,
+                                  const IType *idx, int M, int stride,
                                   mshadow::Shape<ndim> bshape,
                                   mshadow::Shape<ndim> sshape) {
     using namespace broadcast;
-    int j = idx[i];
+    int j = static_cast<int>(idx[i]);
     if (j < 0) j = 0;
     else if (j >= M) j = M-1;
     j = ravel(unravel(i, sshape), bshape) + j*stride;
@@ -501,13 +523,13 @@ struct pick {
 /*! \brief index element from array along axes */
 template<int ndim>
 struct pick_grad {
-  template<typename DType>
+  template<typename DType, typename IType>
   MSHADOW_XINLINE static void Map(int i, DType* igrad, const DType* ograd,
-                                  const int *idx, int M, int stride,
+                                  const IType *idx, int M, int stride,
                                   mshadow::Shape<ndim> bshape,
                                   mshadow::Shape<ndim> sshape) {
     using namespace broadcast;
-    int j = idx[i];
+    int j = static_cast<int>(idx[i]);
     if (j < 0) j = 0;
     else if (j >= M) j = M-1;
     j = ravel(unravel(i, sshape), bshape) + j*stride;
@@ -522,11 +544,13 @@ inline bool PickOpShape(const nnvm::NodeAttrs& attrs,
   CHECK_EQ(out_attrs->size(), 1);
   const TShape& ishape = (*in_attrs)[0];
   if (ishape.ndim() == 0) return false;
-  const ReduceAxisParam& param = nnvm::get<ReduceAxisParam>(attrs.parsed);
+  const PickParam& param = nnvm::get<PickParam>(attrs.parsed);
   if (!param.axis) LOG(FATAL)
     << "axis=None is not supported by pick yet. Must specify an axis.";
-
-  TShape oshape = ReduceAxisShapeImpl(param, ishape);
+  ReduceAxisParam tmp_param;
+  tmp_param.axis = param.axis;
+  tmp_param.keepdims = param.keepdims;
+  TShape oshape = ReduceAxisShapeImpl(tmp_param, ishape);
   SHAPE_ASSIGN_CHECK(*out_attrs, 0, oshape);
   SHAPE_ASSIGN_CHECK(*in_attrs, 1, oshape);
   return true;
@@ -535,11 +559,11 @@ inline bool PickOpShape(const nnvm::NodeAttrs& attrs,
 inline bool PickOpType(const nnvm::NodeAttrs& attrs,
                        std::vector<int> *in_attrs,
                        std::vector<int> *out_attrs) {
-  CHECK_EQ(in_attrs->size(), 2);
-  CHECK_EQ(out_attrs->size(), 1);
+  CHECK_EQ(in_attrs->size(), 2U);
+  CHECK_EQ(out_attrs->size(), 1U);
+  CHECK_NE((*in_attrs)[1], -1) << "Index type must be set for pick operator";
   TYPE_ASSIGN_CHECK(*out_attrs, 0, (*in_attrs)[0]);
   TYPE_ASSIGN_CHECK(*in_attrs, 0, (*out_attrs)[0]);
-  TYPE_ASSIGN_CHECK(*in_attrs, 1, mshadow::kInt32);
   return (*out_attrs)[0] != -1;
 }
 
@@ -553,7 +577,7 @@ void PickOpForward(const nnvm::NodeAttrs& attrs,
   using namespace mshadow;
   CHECK_EQ(req[0], kWriteTo);
   mshadow::Stream<xpu> *s = ctx.get_stream<xpu>();
-  const ReduceAxisParam& param = nnvm::get<ReduceAxisParam>(attrs.parsed);
+  const PickParam& param = nnvm::get<PickParam>(attrs.parsed);
 
   const TShape& ishape = inputs[0].shape_;
   int axis = CheckAxis(param.axis.value(), ishape.ndim());
@@ -561,17 +585,19 @@ void PickOpForward(const nnvm::NodeAttrs& attrs,
   for (index_t i = 0; i < axis; ++i) leading *= ishape[i];
   for (index_t i = axis+1; i < ishape.ndim(); ++i) trailing *= ishape[i];
 
-  MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
-    if (trailing == 1) {
-      Kernel<pick<2>, xpu>::Launch(s, outputs[0].Size(), outputs[0].dptr<DType>(),
-                                   inputs[0].dptr<DType>(), inputs[1].dptr<int>(),
-                                   M, 1, Shape2(leading, M), Shape2(leading, 1));
-    } else {
-      Kernel<pick<3>, xpu>::Launch(s, outputs[0].Size(), outputs[0].dptr<DType>(),
-                                   inputs[0].dptr<DType>(), inputs[1].dptr<int>(),
-                                   M, trailing, Shape3(leading, M, trailing),
-                                   Shape3(leading, 1, trailing));
-    }
+  MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {  // output type
+    MSHADOW_TYPE_SWITCH(inputs[1].type_flag_, IType, {  // index type
+      if (trailing == 1) {
+        Kernel<pick<2>, xpu>::Launch(s, outputs[0].Size(), outputs[0].dptr<DType>(),
+                                     inputs[0].dptr<DType>(), inputs[1].dptr<IType>(),
+                                     M, 1, Shape2(leading, M), Shape2(leading, 1));
+      } else {
+        Kernel<pick<3>, xpu>::Launch(s, outputs[0].Size(), outputs[0].dptr<DType>(),
+                                     inputs[0].dptr<DType>(), inputs[1].dptr<IType>(),
+                                     M, trailing, Shape3(leading, M, trailing),
+                                     Shape3(leading, 1, trailing));
+      }
+    });
   });
 }
 
@@ -585,7 +611,7 @@ void PickOpBackward(const nnvm::NodeAttrs& attrs,
   using namespace mshadow;
   if (req[0] == kNullOp) return;
   mshadow::Stream<xpu> *s = ctx.get_stream<xpu>();
-  const ReduceAxisParam& param = nnvm::get<ReduceAxisParam>(attrs.parsed);
+  const PickParam& param = nnvm::get<PickParam>(attrs.parsed);
 
   const TShape& ishape = outputs[0].shape_;
   int axis = CheckAxis(param.axis.value(), ishape.ndim());
@@ -593,18 +619,20 @@ void PickOpBackward(const nnvm::NodeAttrs& attrs,
   for (index_t i = 0; i < axis; ++i) leading *= ishape[i];
   for (index_t i = axis+1; i < ishape.ndim(); ++i) trailing *= ishape[i];
 
-  MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
-    if (req[0] != kAddTo) outputs[0].FlatTo1D<xpu, DType>(s) = 0;
-    if (trailing == 1) {
-      Kernel<pick_grad<2>, xpu>::Launch(s, inputs[0].Size(), outputs[0].dptr<DType>(),
-                                   inputs[0].dptr<DType>(), inputs[1].dptr<int>(),
-                                   M, 1, Shape2(leading, M), Shape2(leading, 1));
-    } else {
-      Kernel<pick_grad<3>, xpu>::Launch(s, inputs[0].Size(), outputs[0].dptr<DType>(),
-                                   inputs[0].dptr<DType>(), inputs[1].dptr<int>(),
-                                   M, trailing, Shape3(leading, M, trailing),
-                                   Shape3(leading, 1, trailing));
-    }
+  MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {  // output type
+    MSHADOW_TYPE_SWITCH(inputs[1].type_flag_, IType, {  // index type
+      if (req[0] != kAddTo) outputs[0].FlatTo1D<xpu, DType>(s) = 0;
+      if (trailing == 1) {
+        Kernel<pick_grad<2>, xpu>::Launch(s, inputs[0].Size(), outputs[0].dptr<DType>(),
+                                     inputs[0].dptr<DType>(), inputs[1].dptr<IType>(),
+                                     M, 1, Shape2(leading, M), Shape2(leading, 1));
+      } else {
+        Kernel<pick_grad<3>, xpu>::Launch(s, inputs[0].Size(), outputs[0].dptr<DType>(),
+                                     inputs[0].dptr<DType>(), inputs[1].dptr<IType>(),
+                                     M, trailing, Shape3(leading, M, trailing),
+                                     Shape3(leading, 1, trailing));
+      }
+    });
   });
 }
 
@@ -615,7 +643,7 @@ void PickOpBackward(const nnvm::NodeAttrs& attrs,
   .set_attr_parser(ParamParser<ReduceAxisParam>)                \
   .set_attr<nnvm::FInferShape>("FInferShape", ReduceAxisShape)  \
   .set_attr<nnvm::FInferType>("FInferType", ElemwiseType<1, 1>) \
-  .add_argument("data", "ndarray-or-symbol", "The input")       \
+  .add_argument("data", "NDArray-or-Symbol", "The input")       \
   .add_arguments(ReduceAxisParam::__FIELDS__())
 
 #define MXNET_OPERATOR_REGISTER_REDUCE(name)                    \
@@ -625,7 +653,7 @@ void PickOpBackward(const nnvm::NodeAttrs& attrs,
   .set_attr_parser(AxesParamParser<ReduceAxesParam>)            \
   .set_attr<nnvm::FInferShape>("FInferShape", ReduceAxesShape)  \
   .set_attr<nnvm::FInferType>("FInferType", ElemwiseType<1, 1>) \
-  .add_argument("data", "ndarray-or-symbol", "The input")       \
+  .add_argument("data", "NDArray-or-Symbol", "The input")       \
   .add_arguments(ReduceAxesParam::__FIELDS__())
 
 #define MXNET_OPERATOR_REGISTER_REDUCE_BACKWARD(name)               \
@@ -642,10 +670,10 @@ void PickOpBackward(const nnvm::NodeAttrs& attrs,
   .set_attr<nnvm::FGradient>("FGradient",                       \
     [](const nnvm::NodePtr& n,                                  \
        const std::vector<nnvm::NodeEntry>& ograds) {            \
-      return MakeGradNode("_broadcast_backward", n, ograds,     \
-                          {{"keepdims", "true"}});              \
+      return MakeNonlossGradNode("_broadcast_backward", n, ograds, {},    \
+                                 {{"keepdims", "true"}});              \
     })                                                          \
-  .add_argument("data", "ndarray-or-symbol", "The input")
+  .add_argument("data", "NDArray-or-Symbol", "The input")
 
 }  // namespace op
 }  // namespace mxnet
