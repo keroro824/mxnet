@@ -7,13 +7,16 @@
 #include <string.h>
 #include <cuda_device_runtime_api.h>
 #include <cuda.h>
+#include "../elemwise_op_common.h"
+#include "../mxnet_op.h"
+#include "broadcast_reduce_op.h"
 
 #ifndef FWT_KERNEL_CUH
 #define FWT_KERNEL_CUH
 #ifndef fwt_kernel_cuh
 #define fwt_kernel_cuh
 #define ELEMENTARY_LOG2SIZE 11
-
+#define THREADS_PER_BLOCK 256
 
 
 namespace mshadow {
@@ -75,9 +78,6 @@ template <typename DType>
 __global__ void fwtBatch1Kernel(DType *d_Output, DType *d_Input, int log2N){
     const int    N = 1 << log2N;
     const int base = blockIdx.x << log2N;
-    int hi = blockIdx.x * blockDim.x + threadIdx.x;
-    //std::printf("blockIdx: %d, blockDim: %d", blockIdx.x, blockDim.x);
-    //std::printf("threadIdx: %d", threadIdx.x);
 
     //(2 ** 11) * 4 bytes == 8KB -- maximum s_data[] size for G80
     extern __shared__ float s_data[];
@@ -224,12 +224,54 @@ void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value
 }
 
 
+
+template <typename DType>
+__global__ void hadamard_sparse_backward_kernel(DType *out, DType *indices, DType *key, int in_dim, int out_dim) {
+
+
+   const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= in_dim*out_dim){
+         return;
+     }
+    int ind = (int) *(key+index/in_dim);
+    int keyvalue = index%in_dim;
+    *(out+index) = ((__popcll(ind & keyvalue) & 1) * -2 + 1) ;
+
+}
+
+
+template <typename DType>
+inline void hadamardTransformBSparse(Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, DType> &indices, Tensor<gpu, 2, DType> &in_grad, Tensor<gpu, 2, DType> &workspace) {
+
+    int in_dim = (unsigned int) key.shape_[1];
+    int n_samples = (unsigned int) key.shape_[0];
+    int out_dim = (unsigned int) indices.shape_[1];
+
+
+    DType *key_p = key.dptr_;
+    DType *workspace_p = workspace.dptr_;
+
+    DType *indices_p = indices.dptr_;
+
+    int batchlen = in_dim*out_dim;
+    int threads_per_block = THREADS_PER_BLOCK;
+    int nblocks = (batchlen + threads_per_block - 1) / threads_per_block ;
+
+    hadamard_sparse_backward_kernel<DType><<<nblocks, threads_per_block>>>(workspace_p, indices_p, key_p, in_dim, out_dim);
+
+}
+
+
+
+
 }
 }
 
 
 namespace mxnet {
 namespace op {
+
 
 template<typename xpu>
 void hadamardTransformGeneral(const nnvm::NodeAttrs& attrs,
@@ -246,21 +288,46 @@ void hadamardTransformGeneral(const nnvm::NodeAttrs& attrs,
 
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
-            Tensor<xpu, 2, DType> out = outputs[0].FlatTo2D<xpu, DType>(s);
-            Tensor<xpu, 2, DType> value = inputs[0].FlatTo2D<xpu, DType>(s);
-            Tensor<xpu, 1, DType> indices = inputs[1].FlatTo1D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > value = inputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 1, DType > indices = inputs[1].FlatTo1D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > out = outputs[0].FlatTo2D<xpu, DType>(s);
 
             mshadow::cuda::hadamardTransformG<DType>(out, value, indices);
 
     });
 }
 
+template<typename xpu>
+void hadamardTransformBack(const nnvm::NodeAttrs& attrs,
+                       const OpContext& ctx,
+                       const std::vector<TBlob>& inputs,
+                       const std::vector<OpReqType>& req,
+                       const std::vector<TBlob>& outputs) {
+    using namespace mshadow;
+    using namespace mshadow::expr;
+
+    CHECK_EQ(inputs.size(), 3);
+    CHECK_EQ(outputs.size(), 2);
+    Stream<xpu> *s = ctx.get_stream<xpu>();
+
+    MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
+
+            Tensor < xpu, 2, DType > in_grad = inputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > input_data = inputs[1].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 1, DType > input_indices = inputs[2].FlatTo1D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > out_grad = outputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor <xpu, 2, DType> workspace = ctx.requested[0].get_space_typed<xpu, 2, DType>(mshadow::Shape2(input_indices.shape_[1], input_data.shape_[1]), s);
+
+            mshadow::cuda::hadamardTransformBSparse<DType>(input_data, input_indices, in_grad, workspace);
+            ASSIGN_DISPATCH(out_grad, req[0], dot(in_grad, workspace));
+    });
+}
 
 NNVM_REGISTER_OP(dense_inplace)
 .set_attr<FCompute>("FCompute<gpu>", hadamardTransformGeneral<gpu>);
 
 NNVM_REGISTER_OP(_backward_dense_inplace)
-.set_attr<FCompute>("FCompute<gpu>", hadamardTransformGeneral<gpu>);
+.set_attr<FCompute>("FCompute<gpu>", hadamardTransformBack<gpu>);
 
 }
 }

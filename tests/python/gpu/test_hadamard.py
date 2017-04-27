@@ -28,7 +28,7 @@ def test_dense_inplace_hadamard(data_temp, indices):
 	indices_mx = mx.nd.array(indices)
 
 	# print data_temp.todense()
-	print indices
+	# print indices
 	start = time.time()
 
 	test = mx.sym.dense_inplace(value=value, indices=index)
@@ -42,7 +42,7 @@ def test_dense_inplace_hadamard(data_temp, indices):
 	back_out = arr_grad[0].asnumpy()
 
 	end = time.time()
-	print out
+	# print out
 	#print(end - start)
 	#print back_out
 	print back_out
@@ -115,19 +115,21 @@ def naive_hadamard(random_mx):
 
 #bad way for checking if they are the same
 if __name__ == "__main__":
-	for i in range(6,7):
+	for i in range(14,16):
 		in_dimension =2**i
-		out_dimension = 2**(i-3)
-		n_samples = 2
+		out_dimension = 2**(i-5)
+		n_samples = 100
 		# set_default_context(mx.cpu())
 		data = sparse.rand(n_samples, in_dimension, density=1, format='dok', dtype=None, random_state=None)
 		indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
 		#indices = np.array([range(in_dimension)])
 
-		print data
+		# print data
 		# print indices
 		#sparse = test_sparse_direct_hadamard(data)
 		set_default_context(mx.cpu())
+		times, dense = test_dense_inplace_hadamard(data, indices)
+		set_default_context(mx.gpu())
 		timed, densem = test_dense_inplace_hadamard(data, indices)
 		# set_default_context(mx.gpu())
 		# times, sparsem = test_dense_inplace_hadamard(data, indices)
@@ -136,6 +138,6 @@ if __name__ == "__main__":
 		# print in_dimension, out_dimension, timed, times, np.allclose(np.array(sparsem), np.array(densem), rtol=1.e-5, atol=1.e-4)
 	# naive = naive_hadamard(data)
 	
-	# print np.allclose(np.array(dense), np.array(naive))
+		print np.allclose(np.array(dense), np.array(densem))
 
 
