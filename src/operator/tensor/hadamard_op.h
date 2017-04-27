@@ -15,6 +15,9 @@
 #include "./elemwise_binary_op.h"
 #include "broadcast_reduce-inl.h"
 #include <iostream>
+#include "../elemwise_op_common.h"
+#include "../mxnet_op.h"
+#include "broadcast_reduce_op.h"
 
 
 namespace mxnet {
@@ -91,6 +94,7 @@ void hadamardTransform(const nnvm::NodeAttrs& attrs,
 }
 
 
+
 template<typename xpu>
 void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
                                  const OpContext& ctx,
@@ -105,9 +109,36 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
 
-            Tensor < xpu, 2, DType > indices = inputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > in_grad = inputs[0].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > input_data = inputs[1].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > input_indices = inputs[2].FlatTo2D<xpu, DType>(s);
+            Tensor < xpu, 2, DType > out_grad = outputs[0].FlatTo2D<xpu, DType>(s);
 
-            LOG(INFO)<<*(indices.dptr_);
+            DType *in_grad_p = in_grad.dptr_;
+            DType *input_data_p = input_data.dptr_;
+            DType *input_indices_p = input_indices.dptr_;
+            DType *out_grad_p = out_grad.dptr_;
+
+
+            Tensor<xpu, 2, DType> workspace = ctx.requested[0].get_space_typed<xpu, 2, DType>(mshadow::Shape2(input_indices.shape_[1], input_data.shape_[1]), s);
+            DType *workspace_p = workspace.dptr_;
+
+            int k = input_indices.shape_[1];
+            int nnz = workspace.shape_[1];
+            DType *pIndices = input_indices.dptr_;
+
+            for (int i = 0; i<k; i++) {
+
+                for (int j = 0; j<nnz; j++) {
+                    int index = (int) *pIndices;
+                    int keyvalue = j;
+                    *workspace_p = ((__builtin_popcount(index & keyvalue) & 1) * -2 + 1);
+                    workspace_p++;
+                }
+                pIndices++;
+            }
+
+            ASSIGN_DISPATCH(out_grad, req[0], dot(in_grad, workspace));
 
     });
 }
