@@ -222,6 +222,47 @@ inline void hadamardTransformBSparse(Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, 
 
 }
 
+
+template <typename DType>
+__global__ void hadamard_sparse_backward_kernel(DType *out, DType *indices, DType *key, int in_dim, int out_dim) {
+
+
+   const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= in_dim*out_dim){
+         return;
+     }
+    int ind = (int) *(key+index/in_dim);
+    int keyvalue = index%in_dim;
+    *(out+index) = ((__popcll(ind & keyvalue) & 1) * -2 + 1) ;
+
+}
+
+
+template <typename DType>
+inline void hadamardTransformBSparse(Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, DType> &indices, Tensor<gpu, 2, DType> &in_grad, Tensor<gpu, 2, DType> &workspace) {
+
+    int in_dim = (unsigned int) key.shape_[1];
+    int n_samples = (unsigned int) key.shape_[0];
+    int out_dim = (unsigned int) indices.shape_[1];
+
+
+    DType *key_p = key.dptr_;
+    DType *workspace_p = workspace.dptr_;
+
+    DType *indices_p = indices.dptr_;
+
+    int batchlen = in_dim*out_dim;
+    int threads_per_block = THREADS_PER_BLOCK;
+    int nblocks = (batchlen + threads_per_block - 1) / threads_per_block ;
+
+    hadamard_sparse_backward_kernel<DType><<<nblocks, threads_per_block>>>(workspace_p, indices_p, key_p, in_dim, out_dim);
+
+}
+
+
+
+
 }
 }
 

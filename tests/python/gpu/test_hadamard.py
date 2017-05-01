@@ -126,6 +126,7 @@ if __name__ == "__main__":
 		indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
 		#indices = np.array([range(in_dimension)])
 		sign = np.random.choice(np.array([-1, 1]), in_dimension)
+
 		# print data
 		# print indices
 		#sparse = test_sparse_direct_hadamard(data)
