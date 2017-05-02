@@ -53,47 +53,6 @@ inline bool HadaType(const nnvm::NodeAttrs& attrs,
   return true;
 }
 
-
-NNVM_REGISTER_OP(hadamard_dense)
-.describe(R"code(Compute the Subsampled Randomized Hadamard Transform of the input data.
-
-Computes \Omega * X where X is the input data and \Omega is the SRH matrix defined by
-
-\Omega = \frac{n}{l} R H D
-
-The input data is expected to have shape: ``(num_samples, num_features)`` where
-`num_features` has been padded with zeros to have its dimension be a power of 2.
-
-The R matrix is a matrix of SIZE samples from R^XXX.
-
-The D matrix is a diagonal matrix of i.i.d samples drawn from [-1, 1].
-
-H is the recursively define noramlized Walsh-Hadamard matrix.
-
-Due to their nature, R and D can be specified by vectors, and H does not need to
-be given.
-
-Examples::
-
-Beidi's 1024 example here.
-
-)code" ADD_FILELINE)
-.set_num_inputs(3)
-.set_num_outputs(1)
-.set_attr<nnvm::FListInputNames>("FListInputNames",
-  [](const NodeAttrs& attrs) {
-    return std::vector<std::string>{"data", "indices", "sign"};
-  })
-.set_attr<nnvm::FInferShape>("FInferShape", HadaShape<3, 1>)
-.set_attr<nnvm::FInferType>("FInferType", HadaType<3, 1>)
-.set_attr<nnvm::FInplaceOption>("FInplaceOption",
- [](const NodeAttrs& attrs){
- return std::vector<std::pair<int, int> >{{0, 0}};
- })
-.add_argument("data", "NDArray-or-Symbol", "The input array.")
-.add_argument("indices", "NDArray-or-Symbol", "The indices representing the columns of the R matrix.")
-.add_argument("sign", "NDArray-or-Symbol", "The diagonal elements of the D matrix (+/- 1)");
-
 }  // namespace op
 }  // namespace mxnet
 #endif  // MXNET_OPERATOR_TENSOR_HADAMARD_OP_H_

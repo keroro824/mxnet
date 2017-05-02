@@ -21,7 +21,7 @@ del test_support_vector_machine_l2_svm
 
 # test hadamard for dense input
 def test_dense_inplace_hadamard(data_temp, indices, sign):
-	value = mx.symbol.Variable('value')
+	data = mx.symbol.Variable('data')
 	index = mx.symbol.Variable('indices')
 	signs = mx.symbol.Variable('sign')
 	
@@ -33,7 +33,7 @@ def test_dense_inplace_hadamard(data_temp, indices, sign):
 	# print indices
 	start = time.time()
 
-	test = mx.sym.hadamard_dense(value=value, indices=index, sign=signs)
+	test = mx.sym.hadamard_dense(data=data, indices=index, sign=signs)
 	arr_grad = [mx.nd.empty(input_mx.shape), mx.nd.empty(indices.shape), mx.nd.empty(sign.shape)]
 
 	exe_test = test.bind(default_context(), args=[input_mx, indices_mx, sign_mx], args_grad=arr_grad)
