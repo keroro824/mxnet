@@ -28,12 +28,16 @@ template<int n_in, int n_out>
 inline bool HadaShape(const nnvm::NodeAttrs& attrs,
                       std::vector<TShape> *in_attrs,
                       std::vector<TShape> *out_attrs) {
-
   CHECK_EQ(in_attrs->size(), n_in) << " in operator " << attrs.name;
   CHECK_EQ(out_attrs->size(), n_out) << " in operator " << attrs.name;
 
   const TShape &rshape = (*in_attrs)[0];
   const TShape &cshape = (*in_attrs)[1];
+  const TShape &dshape = (*in_attrs)[2];
+
+  CHECK(rshape[1] > 0 && (rshape[1] & (rshape[1] - 1)) == 0) << "column dimension must be a power of 2. Consider padding with zeros.";
+  CHECK_EQ(rshape[1], dshape[0]) << "Array of diagonals must match second dimension of input data.";
+
   out_attrs->clear();
   out_attrs->push_back(Shape2(rshape[0], cshape[1]));
   return true;
