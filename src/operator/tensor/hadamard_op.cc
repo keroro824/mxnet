@@ -123,7 +123,7 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
 }
 
 
-MXNET_OPERATOR_REGISTER_HADAMARD(hadamard_dense)
+NNVM_REGISTER_OP(hadamard_dense)
 .set_attr<FCompute>("FCompute<cpu>", hadamardTransform<cpu>)
 .set_attr<nnvm::FGradient>("FGradient", ElemwiseGradUseIn{"_backward_hadamard_dense"});
 
