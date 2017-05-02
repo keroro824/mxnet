@@ -126,18 +126,21 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs& attrs,
 NNVM_REGISTER_OP(hadamard_dense)
 .describe(R"code(Compute the Subsampled Randomized Hadamard Transform of the input data.
 
-Computes \Omega * X where X is the input data and \Omega is the SRH matrix defined by
+Computes X * \Omega^T where X is the input data of shape `(m, n)` and \Omega is the SRH matrix defined by:
 
 \Omega = \frac{n}{l} R H D
+
+with shape: `(l, n)` where `l` is the dimension of space to reduce onto.
 
 The input data is expected to have shape: ``(num_samples, num_features)`` where
 `num_features` has been padded with zeros to have its dimension be a power of 2.
 
-The R matrix is a matrix of SIZE samples from R^XXX.
+The R matrix is a matrix of shape `(l, n)`.
 
-The D matrix is a diagonal matrix of i.i.d samples drawn from [-1, 1].
+The D matrix is a diagonal matrix of i.i.d samples drawn from [-1, 1] with
+shape: `(n, n)`
 
-H is the recursively define noramlized Walsh-Hadamard matrix.
+H is the recursively define noramlized Walsh-Hadamard matrix with shape `(n, n)`
 
 Due to their nature, R and D can be specified by vectors, and H does not need to
 be given.
