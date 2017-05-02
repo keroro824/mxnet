@@ -54,23 +54,24 @@ inline bool HadaType(const nnvm::NodeAttrs& attrs,
 }
 
 
-#define MXNET_OPERATOR_REGISTER_HADAMARD(name)                        \
+#define MXNET_OPERATOR_REGISTER_HADAMARD(name)                      \
   NNVM_REGISTER_OP(name)                                            \
   .set_num_inputs(3)                                                \
   .set_num_outputs(1)                                               \
   .set_attr<nnvm::FListInputNames>("FListInputNames",               \
     [](const NodeAttrs& attrs) {                                    \
-      return std::vector<std::string>{"value", "indices", "sign"};                \
-    })          \
-  .set_attr<nnvm::FInplaceOption>("FInplaceOption",     \
-   [](const NodeAttrs& attrs){                          \
-   return std::vector<std::pair<int, int> >{{0, 0}};    \
-   })                                                           \
-  .set_attr<nnvm::FInferShape>("FInferShape", HadaShape<3, 1>)  \
-  .set_attr<nnvm::FInferType>("FInferType", HadaType<3, 1>)     \
-  .add_argument("value", "ndarray-or-symbol", "first input")                    \
-  .add_argument("indices", "ndarray-or-symbol", "second input")     \
-  .add_argument("sign", "ndarray-or-symbol", "third input")
-    }  // namespace op
+      return std::vector<std::string>{"value", "indices", "sign"};  \
+    })                                                              \
+  .set_attr<nnvm::FInferShape>("FInferShape", HadaShape<3, 1>)      \
+  .set_attr<nnvm::FInferType>("FInferType", HadaType<3, 1>)         \
+  .set_attr<nnvm::FInplaceOption>("FInplaceOption",                 \
+   [](const NodeAttrs& attrs){                                      \
+   return std::vector<std::pair<int, int> >{{0, 0}};                \
+   })                                                               \
+  .add_argument("value", "NDArray-or-Symbol", "first input")        \
+  .add_argument("indices", "NDArray-or-Symbol", "second input")     \
+  .add_argument("sign", "NDArray-or-Symbol", "third input")
+
+}  // namespace op
 }  // namespace mxnet
 #endif  // MXNET_OPERATOR_TENSOR_HADAMARD_OP_H_
