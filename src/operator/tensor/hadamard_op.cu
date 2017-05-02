@@ -261,8 +261,6 @@ inline void hadamardTransformBSparse(Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, 
 }
 
 
-
-
 }
 }
 

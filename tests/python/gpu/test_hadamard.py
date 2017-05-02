@@ -47,15 +47,16 @@ def test_dense_inplace_hadamard(data_temp, indices, sign):
 	# print out
 	#print(end - start)
 	#print back_out
-	print back_out
+	print out
 	return (end - start), out, back_out
 
 
 # test hadamard for sparse input
-def test_sparse_direct_hadamard(random_mx, indices, input_dim):
+def test_sparse_direct_hadamard(random_mx, indices, sign, input_dim):
 	keys = mx.symbol.Variable('keys')
 	values = mx.symbol.Variable('values')
 	index = mx.symbol.Variable('indices')
+	signs = mx.symbol.Variable('sign')
 	# set_default_context(mx.cpu(0))
 	# keys_np = []
 	# for key in random_mx.keys():
@@ -75,15 +76,17 @@ def test_sparse_direct_hadamard(random_mx, indices, input_dim):
 
 	values_mx = mx.nd.array([values_np])
 	indices_mx = mx.nd.array(indices)
+	sign_mx = mx.nd.array(sign)
 
 	start = time.time()
 
-	test = mx.sym.sparse_inplace(keys=keys, values=values, indices=index, n_samples=input_dim )
-	exe_test = test.bind(default_context(), args=[keys_mx, values_mx, indices_mx], args_grad=None, grad_req="null")
+	test = mx.sym.hadamard_sparse(keys=keys, values=values, indices=index, sign=signs, n_samples=input_dim )
+	exe_test = test.bind(default_context(), args=[keys_mx, values_mx, indices_mx, sign_mx], args_grad=None, grad_req="null")
 	exe_test.forward(is_train=False)
 	out = exe_test.outputs[0].asnumpy()
 
 	end = time.time()
+	#print sign
 	print out
 	return (end - start), out
 
@@ -122,21 +125,23 @@ if __name__ == "__main__":
 		out_dimension = 2**(i-5)
 		n_samples = 100
 		# set_default_context(mx.cpu())
-		data = sparse.rand(n_samples, in_dimension, density=1, format='dok', dtype=None, random_state=None)
+		data = sparse.rand(n_samples, in_dimension, density=0.001, format='dok', dtype=None, random_state=None)
 		indices = np.random.randint(in_dimension-1, size=(1,out_dimension))
 		#indices = np.array([range(in_dimension)])
 		sign = np.random.choice(np.array([-1, 1]), in_dimension)
-
+		#print sign
+		#print indices
+		#sign = np.ones((1, in_dimension))
 		# print data
 		# print indices
 		#sparse = test_sparse_direct_hadamard(data)
 		set_default_context(mx.cpu())
-		times, dense, denseback = test_dense_inplace_hadamard(data, indices, sign)
+		times, dense = test_sparse_direct_hadamard(data, indices, sign, n_samples)
 		set_default_context(mx.gpu())
-		timed, densem, densemback = test_dense_inplace_hadamard(data, indices, sign)
+		timed, densem = test_sparse_direct_hadamard(data, indices, sign, n_samples)
 		# set_default_context(mx.gpu())
-		# times, sparsem = test_dense_inplace_hadamard(data, indices)
+		times, sparsem, t = test_dense_inplace_hadamard(data, indices, sign)
 
-		print in_dimension, out_dimension, timed, times, np.allclose(np.array(dense), np.array(densem), rtol=1.e-5, atol=1.e-2), np.allclose(np.array(denseback), np.array(densemback), rtol=1.e-5, atol=1.e-2)
+		print in_dimension, out_dimension, timed, times, np.allclose(np.array(dense), np.array(densem), rtol=1.e-5, atol=1.e-2)
 
 

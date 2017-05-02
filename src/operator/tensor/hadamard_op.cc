@@ -1,6 +1,4 @@
 #include "./hadamard_op.h"
-//#include "./elemwise_binary_op.h"
-//#include "./elemwise_binary_broadcast_op.h"
 
 namespace mxnet {
 namespace op {
