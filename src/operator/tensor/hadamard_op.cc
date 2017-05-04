@@ -147,6 +147,8 @@ be given.
 
 Examples::
 
+data = data.copy() (remember to save a copy of the input data because the operator will perform inplace hadamard transform which changes the input accordingly)
+
 data (data.shape = (10, 1000)), 10 input samples which have 1000 features
 indices (indices.shape = (1, 100), the vector representation of matrix R
 sign (sign.shape = (1. 1024), the vector representation of matrix D
@@ -157,6 +159,8 @@ data.shape = (10, 1024)
 Step 2: mx.nd.hadamard_dense(data, indices, sign)
 
 Output would have shape (10, 100) which is the resulting samples by applying Sparse Random Projection to the input data.
+
+
 
 )code" ADD_FILELINE)
 .set_num_inputs(3)
