@@ -127,7 +127,7 @@ __global__ void rsKernel(
   int in_dim,
   int out_dim)
 {
-  const int real = blockIdx.x * blockDim.x + threadIdx.x;
+  const int real = blockIdx.x * blockDim.x +blockIdx.y * blockDim.y + threadIdx.x;
   const int pos = real%out_dim;
   const int sample_n =  real/out_dim;
   if (pos>=out_dim){
@@ -179,8 +179,10 @@ void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value
   fwtBatch1Kernel<DType><<<M, N / 4, N * sizeof(DType)>>>(d_Data, d_Data, log2N);
 
   const int threads_per_block = min(THREAD_N, out_dim);// to make number of threads the same as input
-  int nblocks = n_samples*((out_dim + threads_per_block - 1) / threads_per_block) ;
-  rsKernel<DType><<<nblocks, threads_per_block>>>(out_p, d_Data, indices_p, in_dim, out_dim);
+
+  int nblocks = ((out_dim + threads_per_block - 1) / threads_per_block) ;
+  dim3 grid_sample(nblocks, n_samples, 1);
+  rsKernel<DType><<<grid_sample, threads_per_block>>>(out_p, d_Data, indices_p, in_dim, out_dim);
 
 }
 
