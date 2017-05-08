@@ -127,7 +127,8 @@ __global__ void rsKernel(
   int in_dim,
   int out_dim)
 {
-  const int real = blockIdx.x * blockDim.x +blockIdx.y * blockDim.y + threadIdx.x;
+  int blockId   = blockIdx.y * gridDim.x + blockIdx.x;        
+  int real = blockId * blockDim.x + threadIdx.x; 
   const int pos = real%out_dim;
   const int sample_n =  real/out_dim;
   if (pos>=out_dim){
