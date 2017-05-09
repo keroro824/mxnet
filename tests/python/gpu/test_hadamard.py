@@ -25,7 +25,7 @@ def test_dense_inplace_hadamard(data_temp, indices, sign):
 	index = mx.symbol.Variable('indices')
 	signs = mx.symbol.Variable('sign')
 	
-	input_mx = mx.nd.array(data_temp.todense())
+	input_mx = mx.nd.array(data_temp)
 	indices_mx = mx.nd.array(indices)
 	sign_mx = mx.nd.array(sign)
 
@@ -136,11 +136,11 @@ if __name__ == "__main__":
 		# print indices
 		#sparse = test_sparse_direct_hadamard(data)
 		set_default_context(mx.cpu())
-		times, dense, tt = test_dense_inplace_hadamard(data, indices, sign)
+		times, dense = test_sparse_direct_hadamard(data, indices, sign, n_samples)
 		set_default_context(mx.gpu())
 		# timed, densem = test_sparse_direct_hadamard(data, indices, sign, n_samples)
 		# set_default_context(mx.gpu())
-		timed, densem, t = test_dense_inplace_hadamard(data, indices, sign)
+		timed, densem = test_sparse_direct_hadamard(data, indices, sign, n_samples)
 
 		print in_dimension, out_dimension, timed, times, np.allclose(np.array(dense), np.array(densem), rtol=1.e-5, atol=1.e-2)
 
