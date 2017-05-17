@@ -11,7 +11,7 @@ void hadamardTransformSparse(const nnvm::NodeAttrs &attrs,
                              const std::vector <TBlob> &outputs) {
     using namespace mshadow;
     using namespace mshadow::expr;
-    CHECK_EQ(inputs.size(), 4);
+    CHECK_EQ(inputs.size(), 5);
     CHECK_EQ(outputs.size(), 1);
     Stream <xpu> *s = ctx.get_stream<xpu>();
 
@@ -71,15 +71,15 @@ void hadamardTransform_backwards(const nnvm::NodeAttrs &attrs,
 DMLC_REGISTER_PARAMETER(InputParam);
 
 NNVM_REGISTER_OP(hadamard_sparse)
-.set_num_inputs(4)
+.set_num_inputs(5)
 .set_num_outputs(1)
 .set_attr<nnvm::FListInputNames>("FListInputNames",
 [](const NodeAttrs& attrs) {
-  return std::vector<std::string>{"keys", "values", "indices", "sign"};
+  return std::vector<std::string>{"keys", "values", "indices", "sign", "ind"};
 })
 .set_attr_parser(ParamParser<InputParam>)
-.set_attr<nnvm::FInferShape>("FInferShape", HadaShapeSparse<4, 1>)
-.set_attr<nnvm::FInferType>("FInferType", HadaTypeSparse<4, 1>)
+.set_attr<nnvm::FInferShape>("FInferShape", HadaShapeSparse<5, 1>)
+.set_attr<nnvm::FInferType>("FInferType", HadaTypeSparse<5, 1>)
 .set_attr<FCompute>("FCompute<cpu>", hadamardTransformSparse<cpu>)
 .set_attr<FResourceRequest>("FResourceRequest",
 [](const NodeAttrs& attrs) {
@@ -90,11 +90,12 @@ return std::vector<ResourceRequest>{ResourceRequest::kTempSpace};
 .add_argument("keys", "ndarray-or-symbol", "first input")
 .add_argument("values", "ndarray-or-symbol", "second input")
 .add_argument("indices", "ndarray-or-symbol", "third input")
-.add_argument("sign", "ndarray-or-symbol", "forth input");
+.add_argument("sign", "ndarray-or-symbol", "forth input")
+.add_argument("ind", "ndarray-or-symbol", "fifth input");
 
 NNVM_REGISTER_OP(_backward_hadamard_sparse)
 .set_num_inputs(1)
-.set_num_outputs(4)
+.set_num_outputs(5)
 .set_attr<nnvm::TIsBackward>("TIsBackward", true)
 .set_attr<FResourceRequest>("FResourceRequest",
 [](const NodeAttrs& attrs) {
