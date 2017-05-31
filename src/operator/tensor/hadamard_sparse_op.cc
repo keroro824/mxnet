@@ -87,11 +87,11 @@ return std::vector<ResourceRequest>{ResourceRequest::kTempSpace};
 })
 .set_attr<nnvm::FGradient>("FGradient", ElemwiseGradUseIn{"_backward_hadamard_sparse"})
 .add_arguments(InputParam::__FIELDS__())
-.add_argument("keys", "ndarray-or-symbol", "first input")
-.add_argument("values", "ndarray-or-symbol", "second input")
-.add_argument("indices", "ndarray-or-symbol", "third input")
-.add_argument("sign", "ndarray-or-symbol", "forth input")
-.add_argument("ind", "ndarray-or-symbol", "fifth input");
+.add_argument("keys", "NDArray-or-Symbol", "first input")
+.add_argument("values", "NDArray-or-Symbol", "second input")
+.add_argument("indices", "NDArray-or-Symbol", "third input")
+.add_argument("sign", "NDArray-or-Symbol", "forth input")
+.add_argument("ind", "NDArray-or-Symbol", "fifth input");
 
 NNVM_REGISTER_OP(_backward_hadamard_sparse)
 .set_num_inputs(1)

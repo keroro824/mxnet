@@ -18,25 +18,32 @@ namespace mshadow {
 namespace cuda {
 
 
-
-
 template <typename DType>
 __global__ void hadamard_sparse_forward_kernel(const int nthreads, DType *out, DType *indices, DType *value, DType *key, int in_dim, int out_dim, DType *sign, DType *save) {
 
 
-   const int index = blockIdx.x * blockDim.x + threadIdx.x;
+   // const int index = blockIdx.x * blockDim.x + threadIdx.x;
+  //     int blockId   = blockIdx.y * gridDim.x + blockIdx.x;        
+  // int real = blockId * blockDim.x + threadIdx.x; 
+  // const int index = real%out_dim;
+  // const int sample_n =  real/out_dim;
 
-    if (index >= nthreads){
+    int col1 = blockIdx.x*blockDim.x+threadIdx.x;
+  int row = blockIdx.y*blockDim.y+threadIdx.y;
+  const int real = col1 + row * gridDim.x *blockDim.x ;
+const int index = real%out_dim;
+const int sample_n =  real/out_dim;
+    if (real >= nthreads){
          return;
      }
 
     int k = out_dim;
-    int col = index%out_dim;
+    int col = index;
     //int nnz = in_dim;
 
     DType *pKeys = key;
     DType *pIndices = indices;
-    int sample = index/out_dim;
+    int sample = sample_n;
     int start;
     if (sample==0){
         start = 0;
@@ -81,25 +88,20 @@ inline void hadamardTransformGSparse(Tensor<gpu, 2, DType> &out, Tensor<gpu, 1, 
     DType *save_p = save.dptr_;
 
     DType *indices_p = indices.dptr_;
-    int processing_batch_size = 32;
 
-    int upper_bound = n_samples/processing_batch_size;
-    if (n_samples%processing_batch_size == 0){
-      upper_bound = upper_bound-1;
-    }
-    upper_bound = upper_bound>0? upper_bound:0;
-
-    int bstart = 0;
     //for ( int i = 0; i <= upper_bound; i++ ){
     //    int batchlen = min(processing_batch_size, n_samples - bstart );
         int nthreads = out_dim*n_samples;
         int threads_per_block = min(THREADS_PER_BLOCK, nthreads);
-        int nblocks = (nthreads + threads_per_block - 1) / threads_per_block ;
+        // int nblocks = (nthreads + threads_per_block - 1) / threads_per_block ;
 
         //printf("n_samples %d  upper_bound %d, nthreads %d, nblocks %d", n_samples, upper_bound, nthreads, nblocks);
         //LOG(INFO)<<out_dim<<in_dim<<nthreads<<threads_per_block<<nblocks;
-
-        hadamard_sparse_forward_kernel<DType><<<nblocks, threads_per_block>>>(nthreads, out_p, indices_p, value_p, key_p, in_dim, out_dim, sign_p, save_p);
+        int nblocks = ((nthreads + threads_per_block - 1) / threads_per_block) ;
+        // dim3 grid_sample(nblocks, n_samples, 1);
+        dim3 dimBlock(threads_per_block,1);
+        dim3 dimGrid(int(ceil(sqrt(nblocks))), int(ceil(sqrt(nblocks))), 1);
+        hadamard_sparse_forward_kernel<DType><<<dimGrid, dimBlock>>>(nthreads, out_p, indices_p, value_p, key_p, in_dim, out_dim, sign_p, save_p);
    //     bstart = (i+1)*batchlen;
 
    // }
