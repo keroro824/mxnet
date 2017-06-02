@@ -75,7 +75,7 @@ NNVM_REGISTER_OP(hadamard_sparse)
 .set_num_outputs(1)
 .set_attr<nnvm::FListInputNames>("FListInputNames",
 [](const NodeAttrs& attrs) {
-  return std::vector<std::string>{"keys", "values", "indices", "sign", "ind"};
+  return std::vector<std::string>{"keyy", "values", "indices", "sign", "ind"};
 })
 .set_attr_parser(ParamParser<InputParam>)
 .set_attr<nnvm::FInferShape>("FInferShape", HadaShapeSparse<5, 1>)
@@ -87,7 +87,7 @@ return std::vector<ResourceRequest>{ResourceRequest::kTempSpace};
 })
 .set_attr<nnvm::FGradient>("FGradient", ElemwiseGradUseIn{"_backward_hadamard_sparse"})
 .add_arguments(InputParam::__FIELDS__())
-.add_argument("keys", "NDArray-or-Symbol", "first input")
+.add_argument("keyy", "NDArray-or-Symbol", "first input")
 .add_argument("values", "NDArray-or-Symbol", "second input")
 .add_argument("indices", "NDArray-or-Symbol", "third input")
 .add_argument("sign", "NDArray-or-Symbol", "forth input")

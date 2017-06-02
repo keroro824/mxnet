@@ -15,8 +15,8 @@
 #define FWT_KERNEL_CUH
 #ifndef fwt_kernel_cuh
 #define fwt_kernel_cuh
-#define ELEMENTARY_LOG2SIZE 11
-#define THREADS_PER_BLOCK 256
+#define ELEMENTARY_LOG2SIZE 12
+#define THREADS_PER_BLOCK 512
 
 
 namespace mshadow {
@@ -157,7 +157,7 @@ __global__ void signKernel(
 
 
 template <typename DType>
-void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value, Tensor<gpu, 1, DType> &indices, Tensor<gpu, 1, DType> &sign) {
+void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value, Tensor<gpu, 2, DType> &indices, Tensor<gpu, 2, DType> &sign, Stream<gpu> *s) {
 
   int in_dim = (unsigned int) value.shape_[1];
   int n_samples = (unsigned int) value.shape_[0];
@@ -172,19 +172,19 @@ void hadamardTransformG(Tensor<gpu, 2, DType> &out, Tensor<gpu, 2, DType> &value
   const int THREAD_N = 256;
   int N = 1 << log2N;
 
-  signKernel<DType><<< (M*in_dim-1)/THREAD_N+1, THREAD_N>>>(d_Data, sign_p, in_dim, M);
+  signKernel<DType><<< (M*in_dim-1)/THREAD_N+1, THREAD_N, 0, s->stream_>>>(d_Data, sign_p, in_dim, M);
   dim3 grid((1 << log2N) / (4 * THREAD_N), M, 1);
   for(; log2N > ELEMENTARY_LOG2SIZE; log2N -= 2, N >>= 2, M <<= 2){
-    fwtBatch2Kernel<DType><<<grid, THREAD_N>>>(d_Data, d_Data, N / 4);
+    fwtBatch2Kernel<DType><<<grid, THREAD_N, 0, s->stream_>>>(d_Data, d_Data, N / 4);
   }
-  fwtBatch1Kernel<DType><<<M, N / 4, N * sizeof(DType)>>>(d_Data, d_Data, log2N);
+  fwtBatch1Kernel<DType><<<M, N / 4, N * sizeof(DType), s->stream_>>>(d_Data, d_Data, log2N);
 
   const int threads_per_block = min(THREAD_N, out_dim);// to make number of threads the same as input
 
   int nblocks = ((out_dim + threads_per_block - 1) / threads_per_block) ;
   dim3 grid_sample(nblocks, n_samples, 1);
-  rsKernel<DType><<<grid_sample, threads_per_block>>>(out_p, d_Data, indices_p, in_dim, out_dim);
 
+  rsKernel<DType><<<grid_sample, threads_per_block, 0, s->stream_>>>(out_p, d_Data, indices_p, in_dim, out_dim);
 }
 
 
@@ -288,11 +288,11 @@ void hadamardTransformGeneral(const nnvm::NodeAttrs& attrs,
   MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
 
     Tensor < xpu, 2, DType > value = inputs[0].FlatTo2D<xpu, DType>(s);
-    Tensor < xpu, 1, DType > indices = inputs[1].FlatTo1D<xpu, DType>(s);
-    Tensor < xpu, 1, DType > sign = inputs[2].FlatTo1D<xpu, DType>(s);
+    Tensor < xpu, 2, DType > indices = inputs[1].FlatTo2D<xpu, DType>(s);
+    Tensor < xpu, 2, DType > sign = inputs[2].FlatTo2D<xpu, DType>(s);
     Tensor < xpu, 2, DType > out = outputs[0].FlatTo2D<xpu, DType>(s);
 
-    mshadow::cuda::hadamardTransformG<DType>(out, value, indices, sign);
+    mshadow::cuda::hadamardTransformG<DType>(out, value, indices, sign, s);
 
   });
 }

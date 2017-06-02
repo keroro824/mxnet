@@ -23,6 +23,25 @@ namespace op {
 using namespace mshadow;
 using namespace std;
 
+template<typename DType>
+int searchSortedIndices(int index, DType *sortedIndices, int k) {
+    if (k == 0) return 0;
+    int left = 0;
+    if (index <= (int)(*(sortedIndices+left))) return left;
+    int right = k - 1;
+    if (index > (int)(*(sortedIndices+right))) return right + 1;
+    while (left + 1 < right) {
+        int mid = (left + right) / 2;
+        if (index <= (int)(*(sortedIndices+mid))) {
+            right = mid;
+            if (index > (int)(*(sortedIndices+right))) return right + 1;
+        } else {
+            left = mid;
+            if (index <= (int)(*(sortedIndices+left))) return left;
+        }
+    }
+    return left + 1;
+}
 
 template<int n_in, int n_out>
 inline bool HadaShape(const nnvm::NodeAttrs& attrs,
@@ -36,7 +55,7 @@ inline bool HadaShape(const nnvm::NodeAttrs& attrs,
   const TShape &dshape = (*in_attrs)[2];
 
   CHECK(rshape[1] > 0 && (rshape[1] & (rshape[1] - 1)) == 0) << "column dimension must be a power of 2. Consider padding with zeros.";
-  // CHECK_EQ(rshape[1], dshape[0]) << "Array of diagonals must match second dimension of input data.";
+  CHECK_EQ(rshape[1], dshape[1]) << "Array of diagonals must match second dimension of input data.";
 
   out_attrs->clear();
   out_attrs->push_back(Shape2(rshape[0], cshape[1]));

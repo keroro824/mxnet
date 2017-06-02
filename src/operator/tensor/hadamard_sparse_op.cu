@@ -11,28 +11,31 @@
 #include "broadcast_reduce_op.h"
 
 #define WARPS_PER_BLOCK 1
-#define THREADS_PER_BLOCK 256
+#define THREADS_PER_BLOCK 512
 
 
 namespace mshadow {
 namespace cuda {
 
-
+//Used 20 registers, 384 bytes cmem[0], 8 bytes cmem[2]
+//Maximum number of resident threads per multiprocessor 2048
+//13 sm
+//maximum 26624 threads concurrently 
 template <typename DType>
 __global__ void hadamard_sparse_forward_kernel(const int nthreads, DType *out, DType *indices, DType *value, DType *key, int in_dim, int out_dim, DType *sign, DType *save) {
 
 
    // const int index = blockIdx.x * blockDim.x + threadIdx.x;
-  //     int blockId   = blockIdx.y * gridDim.x + blockIdx.x;        
-  // int real = blockId * blockDim.x + threadIdx.x; 
-  // const int index = real%out_dim;
-  // const int sample_n =  real/out_dim;
+  int blockId   = blockIdx.y * gridDim.x + blockIdx.x;        
+  int real = blockId * blockDim.x + threadIdx.x; 
+  const int index = real%out_dim;
+  const int sample_n =  real/out_dim;
 
-    int col1 = blockIdx.x*blockDim.x+threadIdx.x;
-  int row = blockIdx.y*blockDim.y+threadIdx.y;
-  const int real = col1 + row * gridDim.x *blockDim.x ;
-const int index = real%out_dim;
-const int sample_n =  real/out_dim;
+//     int col1 = blockIdx.x*blockDim.x+threadIdx.x;
+//   int row = blockIdx.y*blockDim.y+threadIdx.y;
+//   const int real = col1 + row * gridDim.x *blockDim.x ;
+// const int index = real%out_dim;
+// const int sample_n =  real/out_dim;
     if (real >= nthreads){
          return;
      }
@@ -55,7 +58,7 @@ const int sample_n =  real/out_dim;
     int end = *(save+sample);
     DType *pValues = value+start;
 
-   
+    // printf("time %d\n", end-start);
     for (int j = start; j<end; j++) {
 
             int ind = (int) *(pIndices+col);
@@ -65,7 +68,7 @@ const int sample_n =  real/out_dim;
             DType *pRes = out;
             pRes += row*k+col;
             //printf("hello everyone %d %d %d %d %d\n", index, ind, j, row, keyvalue);
-            *pRes += ((__popcll(ind & keyvalue) & 1) * -2 + 1) * (*pValues)* signvalue;
+            *pRes += ((__popcll(ind & keyvalue) & 1) * -2 + 1) * (*pValues) * signvalue;
 
             //pKeys+=2;
             pValues++;
@@ -75,7 +78,7 @@ const int sample_n =  real/out_dim;
 
 
 template <typename DType>
-inline void hadamardTransformGSparse(Tensor<gpu, 2, DType> &out, Tensor<gpu, 1, DType> &value, Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, DType> &indices, Tensor<gpu, 1, DType> &sign, Tensor<gpu, 1, DType> &save) {
+inline void hadamardTransformGSparse(Tensor<gpu, 2, DType> &out, Tensor<gpu, 1, DType> &value, Tensor<gpu, 2, DType> &key, Tensor<gpu, 1, DType> &indices, Tensor<gpu, 1, DType> &sign, Tensor<gpu, 1, DType> &save, Stream<gpu> *s) {
 
     int in_dim = (unsigned int) key.shape_[0];
     int n_samples = (unsigned int) out.shape_[0];
@@ -99,9 +102,10 @@ inline void hadamardTransformGSparse(Tensor<gpu, 2, DType> &out, Tensor<gpu, 1, 
         //LOG(INFO)<<out_dim<<in_dim<<nthreads<<threads_per_block<<nblocks;
         int nblocks = ((nthreads + threads_per_block - 1) / threads_per_block) ;
         // dim3 grid_sample(nblocks, n_samples, 1);
-        dim3 dimBlock(threads_per_block,1);
-        dim3 dimGrid(int(ceil(sqrt(nblocks))), int(ceil(sqrt(nblocks))), 1);
-        hadamard_sparse_forward_kernel<DType><<<dimGrid, dimBlock>>>(nthreads, out_p, indices_p, value_p, key_p, in_dim, out_dim, sign_p, save_p);
+        // dim3 dimBlock(threads_per_block,1);
+        // dim3 dimGrid(int(ceil(sqrt(nblocks))), int(ceil(sqrt(nblocks))), 1);
+        // LOG(INFO)<<nblocks;
+        hadamard_sparse_forward_kernel<DType><<<nblocks, threads_per_block,0, s->stream_>>>(nthreads, out_p, indices_p, value_p, key_p, in_dim, out_dim, sign_p, save_p);
    //     bstart = (i+1)*batchlen;
 
    // }
@@ -136,7 +140,7 @@ void hadamardTransformGeneralSparse(const nnvm::NodeAttrs& attrs,
             Tensor<xpu, 1, DType> sign = inputs[3].FlatTo1D<xpu, DType>(s);
             Tensor<xpu, 1, DType> workspace = inputs[4].FlatTo1D<xpu, DType>(s);
             // Tensor<xpu, 1, DType> workspace = ctx.requested[0].get_space_typed<xpu, 1, DType>(mshadow::Shape1(out.shape_[0]), s);
-            mshadow::cuda::hadamardTransformGSparse<DType>(out, value, key,  indices, sign, workspace);
+            mshadow::cuda::hadamardTransformGSparse<DType>(out, value, key,  indices, sign, workspace, s);
 
 
     });
